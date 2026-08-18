@@ -1,6 +1,6 @@
 # reticulum-dart
 
-The shared **user + network protocol stack** for geogram apps (Aurora and
+The shared **user + network protocol stack** for XPRS apps (Aurora and
 others): a Dart implementation of the [Reticulum](https://reticulum.network/)
 network, plus NOSTR identity & notes, LXMF messaging, a distributed NOSTR-style
 relay, a DHT, content-addressed file sharing, the XPRS signature scheme, and
@@ -41,7 +41,7 @@ import 'package:reticulum/reticulum.dart';
 
 ## Install
 
-While this lives in the geogram monorepo, depend on it by path (or git):
+Depend on it by path (or git):
 
 ```yaml
 dependencies:
@@ -49,7 +49,7 @@ dependencies:
     path: ../reticulum-dart
   # or:
   # reticulum:
-  #   git: { url: https://github.com/geograms/reticulum-dart.git }
+  #   git: { url: https://github.com/xprs-dev/reticulum-dart.git }
 ```
 
 Then `flutter pub get`. `MediaArchive`, `RelayEventStore`, etc. use the
@@ -126,7 +126,7 @@ analyze` is clean and the smoke tests pass (`flutter test`).
 The host application is expected to provide: persistence paths, a power/network
 capacity policy (to gate hosting), its own NOSTR profile/identity storage, and a
 BLE service that drives the BLE transport primitives. The APRS protocol itself
-lives in the geogram APRS wapp (C/WASM); only its Dart signing (`xprs_crypto`) is
+lives in the XPRS APRS wapp (C/WASM); only its Dart signing (`xprs_crypto`) is
 here.
 
 ## License

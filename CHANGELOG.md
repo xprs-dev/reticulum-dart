@@ -1,6 +1,6 @@
 ## 0.1.0
 
-Initial extraction from the Aurora app into the shared geogram protocol package.
+Initial extraction from the Aurora app into the shared XPRS protocol package.
 Aurora now consumes this package as its single source of truth.
 
 - Reticulum transport: identities, announces, links, resources, HDLC, TCP/UDP/auto interfaces.

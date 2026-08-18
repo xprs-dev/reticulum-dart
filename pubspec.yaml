@@ -1,12 +1,12 @@
 name: reticulum
 description: >-
-  The shared geogram network + user protocol stack: a pure-Dart Reticulum core
+  The shared XPRS network + user protocol stack: a pure-Dart Reticulum core
   (transport, links, resources), NOSTR identity & notes, LXMF messaging, a
   distributed social relay, a DHT, content-addressed file sharing, the XPRS
   signature scheme, and BLE transport primitives. Flutter package so apps share
   one identity + network layer.
 version: 0.1.0
-repository: https://github.com/geograms/reticulum-dart
+repository: https://github.com/xprs-dev/reticulum-dart
 publish_to: none
 
 environment:
