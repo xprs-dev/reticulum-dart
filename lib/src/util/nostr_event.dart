@@ -1,11 +1,11 @@
 /*
- * Copyright (c) geogram
+ * Copyright (c) XPRS
  * License: Apache-2.0
  *
  * NOSTR Event Implementation (NIP-01)
  * https://github.com/nostr-protocol/nips/blob/master/01.md
  *
- * Vendored from geogram/lib/util/nostr_event.dart — stripped of the
+ * Vendored from XPRS/lib/util/nostr_event.dart — stripped of the
  * `NostrEvent.alert` factory (which depended on the parent project's
  * Report model) and of the NostrRelayMessage/Response helpers (iwi
  * doesn't talk to relays yet). Keep in sync with the parent until a
@@ -33,7 +33,7 @@ class NostrEventKind {
   static const int channelMuteUser = 44;
 
   /// NIP-78: Application-specific data (parameterized replaceable).
-  /// Used for geogram wapp signatures.
+  /// Used for XPRS wapp signatures.
   static const int applicationSpecificData = 30078;
 }
 

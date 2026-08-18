@@ -1,5 +1,5 @@
 /*
- * Copyright (c) geogram
+ * Copyright (c) XPRS
  * License: Apache-2.0
  */
 

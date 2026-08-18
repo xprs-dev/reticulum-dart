@@ -57,8 +57,8 @@ a shared disk folder) is automatically reachable over Reticulum by its hash.
 
 `FileTransferNode` answers two kinds of incoming Reticulum link:
 
-- on `geogram/dht` → DHT RPCs (see [dht.md](dht.md)),
-- on `geogram/files` → file requests: it reads the bytes from the
+- on `xprs/dht` → DHT RPCs (see [dht.md](dht.md)),
+- on `xprs/files` → file requests: it reads the bytes from the
   `CompositeFileSource`, ships them as a Reticulum **Resource**, and fires
   `onServed(hash)` (which bumps a download counter and serve stats).
 
@@ -117,7 +117,7 @@ STOREs it at the k DHT nodes closest to the file's key, **and registers it for
 the 30‑minute republish loop**. From that moment the downloader:
 
 1. is discoverable as a provider of that hash (DHT `resolve` returns it), and
-2. actually serves the bytes from its archive over `geogram/files` (§3).
+2. actually serves the bytes from its archive over `xprs/files` (§3).
 
 So a file shared into a group gains a new holder with **every** download, and the
 swarm of holders grows without any central coordinator. The original **sender**

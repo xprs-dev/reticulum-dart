@@ -1,7 +1,7 @@
 /*
  * RelayNode — a NOSTR relay/indexer endpoint on the Dart Reticulum stack.
  *
- * Registers a 'geogram'/['relay'] destination and answers relay requests over an
+ * Registers an 'xprs'/['relay'] destination and answers relay requests over an
  * RnsLink (responder side): EVENT publishes an event into the local
  * [RelayEventStore], REQ runs a NIP-01 filter (incl. NIP-50 search) and returns
  * the matches, COUNT returns a tally. As a client (initiator side) it can
@@ -37,7 +37,7 @@ import 'relay_protocol.dart';
 import '../../util/npd.dart';
 import 'spam.dart';
 
-const String kRelayApp = 'geogram';
+const String kRelayApp = 'xprs';
 const List<String> kRelayAspects = ['relay'];
 
 /// 1-byte type tag for relay RPC frames when they share a destination with the
@@ -123,10 +123,10 @@ class RelayNode {
       RnsDestination.hash(identity, kRelayApp, kRelayAspects);
 
   /// The destination relay RPC links (REQ/EVENT/COUNT/SYNC) ride over. Defaults
-  /// to the dedicated geogram/relay dest, but the host can point it at a more
+  /// to the dedicated xprs/relay dest, but the host can point it at a more
   /// reliably-announced destination (e.g. the chat dest) so links route where
   /// transport paths actually exist — public hubs rate-limit and drop the
-  /// dedicated geogram/relay announce, leaving peers with no path to it, so every
+  /// dedicated xprs/relay announce, leaving peers with no path to it, so every
   /// REQ/sync link handshake times out ("0 answered"). The relay IDENTITY and
   /// [relayDestHash] are unaffected: they still classify the role and key the
   /// pointer log locally, needing no path. Mirrors FileTransferNode.rpcApp.

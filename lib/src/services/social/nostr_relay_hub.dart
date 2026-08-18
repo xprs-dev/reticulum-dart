@@ -1161,10 +1161,10 @@ class NostrRelayHub {
       if (id == null) continue;
       for (final sub in _fireSubscribers) {
         _fireBatchMeta[sub]?[id] = {
-          '_geogram_batch': generation,
-          '_geogram_batch_mode': mode,
-          '_geogram_batch_index': index,
-          '_geogram_batch_size': events.length,
+          '_xprs_batch': generation,
+          '_xprs_batch_mode': mode,
+          '_xprs_batch_index': index,
+          '_xprs_batch_size': events.length,
         };
       }
       curatorDelivered++;

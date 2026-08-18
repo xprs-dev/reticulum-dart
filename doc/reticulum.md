@@ -92,7 +92,7 @@ dest_hash     = sha256(name_hash || identity.hash)[:16]
 ```
 
 Aurora uses distinct destinations for distinct services on the same identity,
-e.g. `geogram.chat`, `geogram/files`, `geogram/dht` — so file transfers, DHT RPCs
+e.g. `xprs.chat`, `xprs/files`, `xprs/dht` — so file transfers, DHT RPCs
 and chat each get their own addressable endpoint.
 
 ---
@@ -293,6 +293,6 @@ handle packets split across reads.
   all crypto, hop‑by‑hop routing, HDLC, the Auto/local interface.
 - **Aurora‑specific (built *on* RNS, still over standard links/packets):** the
   file DHT ([dht.md](dht.md)), the LXMF router (`lxmf/`), and the social relay
-  (`social/`). These define their own destinations/aspects (`geogram/dht`,
-  `geogram/files`, …) and ride normal Reticulum links, so a reference RNS node
+  (`social/`). These define their own destinations/aspects (`xprs/dht`,
+  `xprs/files`, …) and ride normal Reticulum links, so a reference RNS node
   relays them transparently even though it doesn't understand the overlay.

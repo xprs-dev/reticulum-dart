@@ -1,11 +1,11 @@
 /*
- * Copyright (c) geogram
+ * Copyright (c) XPRS
  * License: Apache-2.0
  *
  * NOSTR Cryptography Implementation
  * Implements NIP-01 compatible signing using BIP-340 Schnorr signatures
  *
- * Vendored from geogram/lib/util/nostr_crypto.dart — keep in sync
+ * Vendored from XPRS/lib/util/nostr_crypto.dart — keep in sync
  * manually until a shared package lands.
  */
 

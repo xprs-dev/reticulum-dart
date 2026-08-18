@@ -1,6 +1,6 @@
 # Aurora participation coin
 
-A spec for the cryptocurrency layer on top of geogram/aurora. It rewards genuine
+A spec for the cryptocurrency layer on top of XPRS/aurora. It rewards genuine
 participation and deters spammers, while staying usable on a decentralized,
 often-offline mesh (BLE, APRS, Reticulum) where casual and emergency messaging
 must remain free.
@@ -43,7 +43,7 @@ or advanced features require coin postage.
 ## 2. Identity and crypto
 
 - Curve: secp256k1. Identities are x-only pubkeys (BIP-340), same as the rest of
-  geogram (`lib/src/util/nostr_crypto.dart`).
+  XPRS (`lib/src/util/nostr_crypto.dart`).
 - Point arithmetic for ecash lives in `lib/src/services/coin/coin_ec.dart` (scalar/
   point multiply, add/sub/negate, compressed SEC1 (de)serialization, hash-to-curve
   with the Cashu `Secp256k1_HashToCurve_Cashu_` domain separator, hash-to-scalar).

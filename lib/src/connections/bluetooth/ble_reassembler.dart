@@ -2,7 +2,7 @@
 // semantics). A compact frame that overflows one legacy advertisement carries
 // its overflow in the active-scan response as manufacturer data prefixed with
 // [0x3E '>' marker, 0x42 'B' continuation] + overflow bytes. This mirrors the
-// ESP32 ble_hello / geogram_ble_aprs SCAN_RSP scheme so frames up to ~42 bytes
+// ESP32 ble_hello / ble_aprs SCAN_RSP scheme so frames up to ~42 bytes
 // work on every BLE platform.
 //
 // The advert and its scan response may surface together in one scan event
@@ -13,7 +13,7 @@
 
 import 'dart:typed_data';
 
-/// Geogram marker byte ('>') prefixing presence/continuation manufacturer data.
+/// XPRS marker byte ('>') prefixing presence/continuation manufacturer data.
 /// A compact APRS frame has NO marker; a presence beacon has the marker with a
 /// different second byte.
 const int kBleMarker = 0x3E;

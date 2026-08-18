@@ -32,7 +32,7 @@ import 'partial_store.dart';
 import '../../util/npd.dart';
 import 'serve_quota.dart';
 
-const String kFilesApp = 'geogram';
+const String kFilesApp = 'xprs';
 const List<String> kFilesAspects = ['files'];
 
 class _ServeEntry {
@@ -114,11 +114,11 @@ class FileTransferNode {
       RnsDestination.hash(identity, kDhtApp, kDhtAspects);
 
   /// The destination DHT RPC links ride over. Defaults to the dedicated
-  /// geogram/dht dest, but the host can point it at a more reliably-announced
+  /// xprs/dht dest, but the host can point it at a more reliably-announced
   /// destination (e.g. the chat dest) so RPC links route where transport paths
-  /// actually exist — public hubs drop the dedicated geogram/dht announce,
+  /// actually exist — public hubs drop the dedicated xprs/dht announce,
   /// leaving no path to it, so STOREs to peers never land. The Kademlia node id
-  /// (DhtContact.id) is unaffected: it is still derived from the geogram/dht dest
+  /// (DhtContact.id) is unaffected: it is still derived from the xprs/dht dest
   /// locally and never needs a path or an announce.
   final String rpcApp;
   final List<String> rpcAspects;
@@ -264,7 +264,7 @@ class FileTransferNode {
       // so k=96 simply means "query every peer we know"; it is not wasteful on a
       // 37-node overlay (it queries 37). This matters because, mid-migration,
       // chat-routed replication only lands on the NEW-code nodes (the rest still
-      // run DHT on geogram/dht), so redundancy among the closest is sparse and a
+      // run DHT on xprs/dht), so redundancy among the closest is sparse and a
       // resolver MUST be able to reach the holder itself — which it can only
       // guarantee by covering the overlay. This 96 is the SAFE default for a
       // consumer WITHOUT persistence anchors. A consumer that supplies anchors
@@ -349,7 +349,7 @@ class FileTransferNode {
   }
 
   /// Number of confirmed Aurora DHT peers in the routing table (overlay
-  /// membership). 0 means we've heard no other node's geogram/dht announce, so
+  /// membership). 0 means we've heard no other node's xprs/dht announce, so
   /// publish/resolve can only act locally — useful for diagnosing discovery.
   int get dhtRoutingSize => dht?.routing.size ?? 0;
 
@@ -377,7 +377,7 @@ class FileTransferNode {
         return true;
       }
       // Accept DHT links on the configured RPC dest (the chat dest in Aurora; the
-      // geogram/dht dest by default). The files dest is matched first above and
+      // xprs/dht dest by default). The files dest is matched first above and
       // the dests are disjoint, so a real file link is never mis-accepted as DHT.
       if (dht != null &&
           RnsCrypto.constantTimeEquals(p.destHash, rpcDestHash)) {

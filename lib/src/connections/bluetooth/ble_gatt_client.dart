@@ -52,7 +52,7 @@ class BleGattClient {
     });
   }
 
-  /// Offer a discovered peer; connect to the first geogram server seen.
+  /// Offer a discovered peer; connect to the first XPRS server seen.
   void considerPeer(Peripheral peripheral) {
     if (_peer != null || _connecting) return;
     final last = _lastDrop;
@@ -135,7 +135,7 @@ class BleGattClient {
   /// successive parcels overrun the controller buffer and only the first lands —
   /// exactly the "header arrives, data parcels lost" failure. The peer's FFF1 is
   /// a plain/unencrypted characteristic, so with-response does NOT trigger
-  /// bonding/pairing (this mirrors the proven geogram-android sender).
+  /// bonding/pairing (this mirrors the proven XPRS-android sender).
   Future<void> writeRaw(Uint8List data) async {
     final peer = _peer;
     final ch = _writeChar;

@@ -28,10 +28,10 @@ For node A to reach node B over the internet, ALL of these must hold:
    links to the peer time out.
 
 If all three hold, the Aurora DHT overlay forms (each node hears one of the
-other's signed `geogram` announces — `dht`, `files`, **or** `chat` — and adds it
+other's signed `XPRS` announces — `dht`, `files`, **or** `chat` — and adds it
 as a routing-table contact; see [dht.md](dht.md) §8), `resolve` finds holders, and
 links/fetches complete. (Note: provider records mostly do **not** replicate to
-peers on the live mesh — no path to their `geogram/dht` dest — so discovery relies
+peers on the live mesh — no path to their `xprs/dht` dest — so discovery relies
 on the holder keeping its own record and on `k` spanning the overlay; see
 [dht.md](dht.md) §2, §9.)
 
@@ -60,9 +60,9 @@ above. Do not chase NAT.
 ## How it works once the requirements hold
 
 1. **Overlay membership** is by announce: a node is added to the DHT routing table
-   when any of its signed `geogram` announces is heard — `dht`, `files`, or `chat`
+   when any of its signed `XPRS` announces is heard — `dht`, `files`, or `chat`
    (rns_service.dart `_onInbound` → `_files.addPeerFromAnnounce`). The chat announce
-   is included on purpose: hubs rate-limit announces and the dedicated `geogram/dht`
+   is included on purpose: hubs rate-limit announces and the dedicated `xprs/dht`
    one is often dropped, so keying membership only off it was fragile (see
    [dht.md](dht.md) §8). Confirm with `status.dhtPeers > 0`.
 2. **Find a holder:** `DhtNode.resolve(key)` walks the routing table; a node answers
@@ -71,7 +71,7 @@ above. Do not chase NAT.
    Aurora peers, so a consumer that has the host in its table will query it and get
    the record. (For folders the key is the folderId pubkey; see
    [mutable-folders.md](mutable-folders.md).)
-3. **Move the bytes:** a Link to the holder's `geogram/files` destination, carrying a
+3. **Move the bytes:** a Link to the holder's `xprs/files` destination, carrying a
    Resource (reticulum.md §6–7). Every downloader re-publishes a provider record and
    re-serves — the swarm grows (file-sharing.md §5).
 

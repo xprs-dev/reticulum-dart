@@ -1,9 +1,9 @@
 /*
  * DHT-over-chat-dest routing — regression lock for running DHT RPC over a
  * configurable destination (the reliably-announced chat dest) instead of the
- * dedicated geogram/dht dest.
+ * dedicated xprs/dht dest.
  *
- * On the public-hub mesh the geogram/dht announce is dropped by the hubs'
+ * On the public-hub mesh the xprs/dht announce is dropped by the hubs'
  * announce budget, so peers have NO transport path to each other's dht dest and
  * STOREs never land (replication failed; resolve only worked because the holder
  * kept its own record + k=96). Routing DHT RPC over the chat dest (whose announce
@@ -57,7 +57,7 @@ Uint8List _sha32(int seed) =>
 void main() {
   group('DHT-over-chat-dest routing', () {
     /// Publisher A + holder B, wired loopback, where A has a transport path ONLY
-    /// to B's chat dest (modelling hubs that dropped B's geogram/dht announce).
+    /// to B's chat dest (modelling hubs that dropped B's xprs/dht announce).
     /// [aAspects] is A's outbound DHT RPC dest aspects; B accepts on [bAspects].
     Future<(FileTransferNode a, FileTransferNode b)> pair(
         List<String> aAspects, List<String> bAspects) async {
@@ -68,14 +68,14 @@ void main() {
       final loopB = _Loop();
       // Only B's chat dest is routable; its dht dest is NOT (announce dropped).
       final bChatHex =
-          _hex(RnsDestination.hash(bPub, 'geogram', ['chat']));
+          _hex(RnsDestination.hash(bPub, 'xprs', ['chat']));
 
       loopA.node = FileTransferNode(
         identity: aId,
         source: const EmptyFileSource(),
         send: (raw) => loopB.deliver(raw),
         enableDht: true,
-        rpcApp: 'geogram',
+        rpcApp: 'xprs',
         rpcAspects: aAspects,
         hasPathForDest: (h) => _hex(h) == bChatHex,
         nextHopForDest: (h) => null, // direct neighbour over the loopback
@@ -86,7 +86,7 @@ void main() {
         source: const EmptyFileSource(),
         send: (raw) => loopA.deliver(raw),
         enableDht: true,
-        rpcApp: 'geogram',
+        rpcApp: 'xprs',
         rpcAspects: bAspects,
       );
       // A knows B as a DHT contact (Kademlia id derived from B's identity).

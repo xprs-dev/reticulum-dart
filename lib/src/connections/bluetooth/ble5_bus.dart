@@ -50,11 +50,11 @@ class Ble5Bus {
   static const int maxFrame = 450;
 
   static const MethodChannel _method =
-      MethodChannel('com.geogram.aurora/ble5');
+      MethodChannel('com.xprs.app/ble5');
   static const EventChannel _scan =
-      EventChannel('com.geogram.aurora/ble5_scan');
+      EventChannel('com.xprs.app/ble5_scan');
   static const EventChannel _gattEvents =
-      EventChannel('com.geogram.aurora/ble5_gatt');
+      EventChannel('com.xprs.app/ble5_gatt');
 
   final Map<int, void Function(Ble5Frame)> _handlers = {};
   StreamSubscription? _sub;

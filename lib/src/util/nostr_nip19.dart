@@ -1,10 +1,10 @@
 /*
- * Copyright (c) geogram
+ * Copyright (c) XPRS
  * License: Apache-2.0
  *
  * NIP-19 decoder for nostr: URIs (note/npub/nevent/nprofile/naddr).
  *
- * Vendored from geogram/lib/util/nostr_nip19.dart — keep in sync
+ * Vendored from XPRS/lib/util/nostr_nip19.dart — keep in sync
  * manually until a shared package lands.
  */
 

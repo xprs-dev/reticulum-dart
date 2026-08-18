@@ -1,10 +1,10 @@
 /*
- * Copyright (c) geogram
+ * Copyright (c) XPRS
  * License: Apache-2.0
  *
  * NOSTR Key Generator - Uses proper secp256k1 cryptography
  *
- * Vendored from geogram/lib/util/nostr_key_generator.dart — keep in
+ * Vendored from XPRS/lib/util/nostr_key_generator.dart — keep in
  * sync manually until a shared package lands.
  */
 

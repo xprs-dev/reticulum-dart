@@ -3,7 +3,7 @@
  *
  * Serves a device's shared MediaArchive over plain HTTP using the Blossom
  * (Blobs Stored Simply on Mediaservers) conventions from the NOSTR
- * ecosystem, so both other geogram apps and stock Blossom clients can
+ * ecosystem, so both other XPRS apps and stock Blossom clients can
  * fetch referenced media directly:
  *
  *   GET  /<sha256-hex>[.<ext>]   -> the blob (Content-Type from the ext)

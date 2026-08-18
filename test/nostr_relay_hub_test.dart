@@ -285,10 +285,10 @@ void main() {
       expect(await hub.refreshBurst(n: 100), 3);
       final batch = hub.drainEvents(sub, max: 100);
       expect(batch, hasLength(3));
-      expect(batch.map((e) => e['_geogram_batch_mode']).toSet(), {'manual'});
-      expect(batch.map((e) => e['_geogram_batch']).toSet(), hasLength(1));
-      expect(batch.map((e) => e['_geogram_batch_size']).toSet(), {3});
-      expect(batch.map((e) => e['_geogram_batch_index']), [0, 1, 2]);
+      expect(batch.map((e) => e['_xprs_batch_mode']).toSet(), {'manual'});
+      expect(batch.map((e) => e['_xprs_batch']).toSet(), hasLength(1));
+      expect(batch.map((e) => e['_xprs_batch_size']).toSet(), {3});
+      expect(batch.map((e) => e['_xprs_batch_index']), [0, 1, 2]);
       await hub.close();
     },
   );

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) geogram
+ * Copyright (c) XPRS
  * License: Apache-2.0
  */
 
@@ -11,7 +11,7 @@ import 'package:flutter/foundation.dart';
 
 import 'ble_parcel.dart';
 
-// Adapted from geogram: housekeeping runs on a plain periodic Timer (Aurora has
+// Adapted from XPRS: housekeeping runs on a plain periodic Timer (Aurora has
 // no MonitoredPeriodicTimer) and logging goes through debugPrint.
 void _log(String m) => debugPrint(m);
 

@@ -20,7 +20,7 @@ index — see [file-sharing.md](file-sharing.md) §6.)
 
 - **128‑bit keyspace**, matching Reticulum's destination‑hash width
   (`kDhtIdLen = 16`, `dht_core.dart`).
-- A **node ID** is the node's RNS destination hash for the `geogram/dht`
+- A **node ID** is the node's RNS destination hash for the `xprs/dht`
   destination (`DhtContact.ofIdentity`).
 - A **file's key** is the first 128 bits of its SHA‑256: `dhtFileKey(sha256) =
   sha256[:16]`.
@@ -90,12 +90,12 @@ full k internally (§2) and just truncates what it puts on the wire.
 ## 4. Transport binding — DHT over Reticulum links (`file_node.dart`)
 
 Each RPC is a short‑lived **Reticulum link** to the peer's **RPC destination**.
-By default that is `geogram/dht`, but `FileTransferNode` takes `rpcApp`/
+By default that is `xprs/dht`, but `FileTransferNode` takes `rpcApp`/
 `rpcAspects` config and Aurora points it at the **chat** destination
-(`geogram/chat`) — because the dedicated dht announce is dropped by the hubs'
+(`xprs/chat`) — because the dedicated dht announce is dropped by the hubs'
 announce budget, leaving no transport path to it, while the chat announce
 propagates reliably (§8, §9). The Kademlia node id is still derived from
-`geogram/dht` locally and is unaffected. We accept DHT links **only** on the RPC
+`xprs/dht` locally and is unaffected. We accept DHT links **only** on the RPC
 dest (the legacy dht dest is never dialled nor announced — this is a fresh
 deployment, no old-node interop). Every link frame carries a **1‑byte type tag**
 (`0x01` = DHT) so the chat dest can be shared with future tenants without
@@ -104,9 +104,9 @@ that link:
 
 ```
 _dhtRpcRaw(peer, reqBytes):
-  hop = ensurePath(peer, "geogram", ["dht"], maxPolls: 10)  // ~3 s path wait
+  hop = ensurePath(peer, "XPRS", ["dht"], maxPolls: 10)  // ~3 s path wait
   if hop == null: return null             // no route → SKIP this contact fast
-  link = RnsLink.initiator(peer, "geogram", ["dht"])
+  link = RnsLink.initiator(peer, "XPRS", ["dht"])
   link.nextHop = hop                      // route via the learned hub if needed
   send(link.buildRequest())               // LINKREQUEST
   …on proof, send link.encrypt(reqBytes)  // the DHT message, encrypted
@@ -115,7 +115,7 @@ _dhtRpcRaw(peer, reqBytes):
 
 > **Skip‑fast matters for lookup latency.** A DHT lookup queries many contacts
 > and tolerates individual misses, so it must *not* spend the ~9 s path budget a
-> file fetch uses. When there is no route to a contact's `geogram/dht`
+> file fetch uses. When there is no route to a contact's `xprs/dht`
 > destination, `_dhtRpcRaw` returns immediately instead of broadcasting a doomed
 > link request and waiting out the handshake. Before this fix, every stale
 > contact cost ≈9 s (path) + 8 s (handshake), and a resolve walking ~40 of them
@@ -141,7 +141,7 @@ A signed "I provide this file" record:
   without trusting whoever relayed it. (And since downloads are hash‑verified, a
   lying record costs only a wasted round trip.)
 - Carries the provider's **public key**, which is both the verification key *and*
-  the address to reach its `geogram/files` destination.
+  the address to reach its `xprs/files` destination.
 - **TTL = 2700 s (45 min)**; republished **every 30 min** (`rns_service.dart`).
   Abrupt departures self‑heal: a record nobody republishes simply expires.
 - **Capacity class** (archive / home‑fibre / home‑wifi / wifi‑transient /
@@ -178,7 +178,7 @@ red herring, not a bug.)
 >
 > **Reality check:** on the live public‑hub mesh, publish still typically logs
 > `-> 1 holders (+self)` — replication to peers fails because there is no
-> transport path to their `geogram/dht` destination (§9). Discovery works anyway
+> transport path to their `xprs/dht` destination (§9). Discovery works anyway
 > because the holder keeps its own copy and resolve is sized to reach it (§2, §7).
 
 Exposed to the app as `RnsService.dhtPublish(fileHash)`. This is called when you
@@ -236,41 +236,41 @@ peers can actually answer a DHT RPC?
 Reticulum announce advertises a *named destination* and is Ed25519‑signed; the
 destination hash cryptographically binds the name to the announcing identity
 (`dest_hash = sha256(name_hash || identity_hash)[:16]`, see
-[reticulum.md](reticulum.md) §2). An Aurora node announces `geogram` destinations
-(`geogram/files`, `geogram/chat`, …) that no other software announces, so their
-`name_hash` is unique to our overlay. (We no longer announce `geogram/dht` itself —
+[reticulum.md](reticulum.md) §2). An Aurora node announces `XPRS` destinations
+(`xprs/files`, `xprs/chat`, …) that no other software announces, so their
+`name_hash` is unique to our overlay. (We no longer announce `xprs/dht` itself —
 DHT RPC rides the chat dest, §4 — but the id is still derived from it locally.)
 
 So membership is a wire test, not a guess (`rns_service.dart`, `_onInbound`). A
-peer is added to the routing table when we hear **any** of its signed `geogram`
-announces — and we match on `geogram/dht`, `geogram/files`, *and* the
-`geogram/chat` announce:
+peer is added to the routing table when we hear **any** of its signed `XPRS`
+announces — and we match on `xprs/dht`, `xprs/files`, *and* the
+`xprs/chat` announce:
 
 ```dart
-final dhtHash   = RnsDestination.hash(ann.identity, 'geogram', ['dht']);
-final filesHash = RnsDestination.hash(ann.identity, 'geogram', ['files']);
+final dhtHash   = RnsDestination.hash(ann.identity, 'xprs', ['dht']);
+final filesHash = RnsDestination.hash(ann.identity, 'xprs', ['files']);
 if (constantTimeEquals(ann.destHash, dhtHash) ||
     constantTimeEquals(ann.destHash, filesHash)) {
   _files?.addPeerFromAnnounce(ann.identity);   // confirmed overlay node
 }
 …
-final chatHash = RnsDestination.hash(ann.identity, 'geogram', ['chat']);
+final chatHash = RnsDestination.hash(ann.identity, 'xprs', ['chat']);
 if (constantTimeEquals(ann.destHash, chatHash)) {
   _files?.addPeerFromAnnounce(ann.identity);   // chat announce ⇒ also a DHT member
 }
 ```
 
 A contact's DHT id is derived from its **identity**, not from which destination
-we heard — so any proven `geogram` announce is enough to add it. We deliberately
+we heard — so any proven `XPRS` announce is enough to add it. We deliberately
 accept the **chat** announce too, and that is a lesson from the field: **public
-hubs rate‑limit announce propagation**, and the dedicated `geogram/dht` announce
+hubs rate‑limit announce propagation**, and the dedicated `xprs/dht` announce
 is frequently the one that gets dropped while the same node's `chat` announce
 (the most frequently sent, most reliably flooded one) gets through. Keying
-overlay membership *only* off `geogram/dht` was fragile — peers whose dht announce
+overlay membership *only* off `xprs/dht` was fragile — peers whose dht announce
 was dropped never joined the overlay and folder/file discovery silently failed.
-Matching any `geogram` destination is still a cryptographic identity↔name proof,
+Matching any `XPRS` destination is still a cryptographic identity↔name proof,
 so non‑Aurora identities (Sideband/NomadNet/`rnsd`, which never announce a
-`geogram` name) are still never added.
+`XPRS` name) are still never added.
 
 Every Aurora node re‑announces its service destinations on an adaptive cadence
 (30 s when charging on Wi‑Fi/Ethernet, 5 min on battery/cellular — see
@@ -281,27 +281,27 @@ and `resolve` returns nothing immediately instead of timing out on dead contacts
 > **Knowing a peer ≠ being able to route to its DHT dest — so we route to its
 > chat dest.** Adding a contact from its chat announce gives us its identity
 > (hence its DHT id), and a transport path to its **chat** dest. The dedicated
-> `geogram/dht` dest is a *different* destination hash whose announce the hubs may
+> `xprs/dht` dest is a *different* destination hash whose announce the hubs may
 > have dropped, leaving no path to it — historically why replication STOREs failed.
 > Aurora now runs the DHT RPC over the chat dest we already have a route to (§4),
 > closing that gap; `_dhtRpcRaw` still skips a contact fast when even the configured
 > RPC dest has no route resolved.
 
 The same pattern identifies peers for the other overlays — the relay
-(`geogram/relay`), LXMF (`lxmf/delivery`), files (`geogram/files`) — each by its own
+(`xprs/relay`), LXMF (`lxmf/delivery`), files (`xprs/files`) — each by its own
 announced destination name.
 
 ## 9. Honest limitations
 
 - **Replication (historically the big one) — now addressed by routing RPC over
-  chat.** STOREs to a peer's `geogram/dht` dest failed because there was no
+  chat.** STOREs to a peer's `xprs/dht` dest failed because there was no
   transport path to it (its dedicated dht announce was dropped by the hubs'
   announce budget, §8), so a provider record lived **only on its holder**. The fix
-  (§4): run the DHT RPC over the **reliably‑propagated `geogram/chat`
+  (§4): run the DHT RPC over the **reliably‑propagated `xprs/chat`
   destination**, so any peer reachable for chat is reachable for DHT and STOREs
   land on the k‑closest. The holder‑keeps‑own‑record + k‑spans‑overlay safety nets
   (§2, §6, §7) remain as belt‑and‑braces. Two follow‑ups are intentionally *not*
-  yet done: stop announcing `geogram/dht` (a release after dual‑accept is
+  yet done: stop announcing `xprs/dht` (a release after dual‑accept is
   everywhere), and relax `k`/`alpha` back toward Kademlia norms once replication is
   confirmed landing on the live mesh.
 - **Reply size caps** (5 contacts / 2 records per packet) mean wide result sets
@@ -371,11 +371,11 @@ caps are already constructor params).
 
 The three items previously deferred are now done (no migration window to respect):
 
-- **Stopped announcing `geogram/dht`** — DHT RPC rides the chat dest, so the dht
+- **Stopped announcing `xprs/dht`** — DHT RPC rides the chat dest, so the dht
   dest is never dialled; `_announceServiceDests` no longer sends it (one fewer
   per-cycle announce → the others survive the hubs' budget more often). Membership
   comes from the chat/files announces (§8); the Kademlia id is still derived from
-  `geogram/dht` locally. The legacy dual-accept and dht-dest fallback are removed —
+  `xprs/dht` locally. The legacy dual-accept and dht-dest fallback are removed —
   we accept DHT links only on the RPC dest.
 - **MTU-aware reply sizing** (§3) — the DHT link does MTU discovery, and the FIND
   reply caps scale from the 5/2 floor up to 64 contacts / 16 records on a large-MTU

@@ -1,5 +1,5 @@
 // GATT server endpoint for the BLE parcel transport (makes this device a
-// connectable peer). Serves the geogram service FFE0 with write FFF1 (peers
+// connectable peer). Serves the XPRS service FFE0 with write FFF1 (peers
 // write parcels here) and notify FFF2 (we push parcels/receipts), and
 // advertises a presence beacon so peers connect automatically — no pairing
 // (characteristics are open, no encryption). Uses the ble_peripheral package
@@ -129,7 +129,7 @@ class BleGattServer {
   }
 
   // Presence beacon: company 0xFFFF, [0x3E marker, deviceId, callsign] — the
-  // geogram standard the ESP32 expects (it reads the callsign from offset 4,
+  // XPRS standard the ESP32 expects (it reads the callsign from offset 4,
   // i.e. after a 1-byte device id). No pairing; peers connect on the 0x3E marker.
   // NOTE: advertise manufacturer data ONLY — no service UUID. The service UUID
   // here is a 128-bit string; including it (18B) + flags (3B) + this data

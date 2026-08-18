@@ -302,9 +302,9 @@ void main() {
       store,
       port: 0,
       relayInfo: () => {
-        'name': 'geogram',
+        'name': 'xprs',
         'pubkey': pub,
-        'software': 'geogram-aurora',
+        'software': 'xprs',
         'supported_nips': [1, 9, 11, 50],
       },
     ));
@@ -325,7 +325,7 @@ void main() {
       store,
       port: 0,
       relayInfo: () => {
-        'name': 'geogram',
+        'name': 'xprs',
         'description': 'device relay — REQ kind 30078 #d mailto:<email>',
       },
     ));

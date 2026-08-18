@@ -124,8 +124,8 @@ class NostrWsServer {
       // latin-1, so a single non-ASCII character (an em-dash in the relay
       // description was enough) throws inside this async handler — the
       // response is never closed and every probe hangs until it times out.
-      const fallback = '{"name":"geogram","supported_nips":[1,9,11,50],'
-          '"software":"geogram-aurora"}';
+      const fallback = '{"name":"XPRS","supported_nips":[1,9,11,50],'
+          '"software":"xprs"}';
       var body = fallback;
       try {
         final info = relayInfo?.call();

@@ -1,4 +1,4 @@
-// Interop vectors for the ESP32 RNS codec (aurora/esp32/components/geogram_rns).
+// Interop vectors for the ESP32 RNS codec (see the xprs-esp32 repository).
 // Deterministic on purpose: fixed seeds and a fixed IV, so the C implementation
 // must reproduce these exact bytes or it is not speaking Reticulum.
 import 'dart:convert';
