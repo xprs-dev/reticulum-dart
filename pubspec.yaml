@@ -1,0 +1,33 @@
+name: reticulum
+description: >-
+  The shared geogram network + user protocol stack: a pure-Dart Reticulum core
+  (transport, links, resources), NOSTR identity & notes, LXMF messaging, a
+  distributed social relay, a DHT, content-addressed file sharing, the XPRS
+  signature scheme, and BLE transport primitives. Flutter package so apps share
+  one identity + network layer.
+version: 0.1.0
+repository: https://github.com/geograms/reticulum-dart
+publish_to: none
+
+environment:
+  sdk: ^3.10.0
+  flutter: '>=3.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  crypto: ^3.0.3            # SHA-256 / SHA-1
+  pointycastle: ^3.9.1      # secp256k1 / BIP-340 + XPRS short-Schnorr
+  cryptography: ^2.7.0      # X25519 / Ed25519 / AEAD (RNS link + folders)
+  bech32: ^0.2.2            # npub / nsec encoding
+  hex: ^0.2.0               # hex <-> bytes
+  sqlite3: ^2.4.0           # event store / media archive
+  web_socket_channel: ^2.4.0 # wss:// NOSTR relays (native + web)
+  archive: ^3.6.1           # BLE parcel (de)compression
+  bluetooth_low_energy: ^6.0.0   # BLE central + peripheral (GATT)
+  ble_peripheral: ^2.4.0         # BLE advertising (peripheral)
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0

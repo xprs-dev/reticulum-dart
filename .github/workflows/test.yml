@@ -1,0 +1,28 @@
+name: test
+
+# Runs the reticulum-dart unit tests on every push/PR. The file-transfer suite
+# (test/file_transfer_test.dart) is the regression lock for binary transfer over
+# Reticulum — it exercises the segmented-manifest large-file path (1/10/55 MB
+# round-trips), corrupted-chunk rejection, and multi-source work-stealing + the
+# resume-on-drop path entirely in-process, so a regression fails CI instead of
+# being found by hand on devices.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
