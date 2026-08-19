@@ -13,36 +13,50 @@ import 'nostr_crypto.dart';
 /// Generates NOSTR key pairs (npub/nsec) using secp256k1
 class NostrKeyGenerator {
   /// Generate a new key pair with proper secp256k1 keys
-  static NostrKeys generateKeyPair() {
+  ///
+  /// [callsignLength] is how many characters of the key the holder chooses to
+  /// show, 2 to 5 (spec section 3). Four is the default and what every
+  /// callsign in the field is today.
+  static NostrKeys generateKeyPair(
+      {int callsignLength = NostrCrypto.kDefaultCallsignLength}) {
     final keyPair = NostrCrypto.generateKeyPair();
     return NostrKeys(
       npub: keyPair.npub,
       nsec: keyPair.nsec,
-      callsign: keyPair.callsign,
+      callsign: keyPair.callsignOfLength(length: callsignLength),
     );
   }
 
   /// Derive user/operator callsign from npub
-  /// Format: X1 + first 4 characters after 'npub1'
-  static String deriveCallsign(String npub) {
-    return _deriveCallsignFromNpub(npub, 'X1');
+  /// Format: X1 + the first [length] characters after 'npub1'
+  static String deriveCallsign(String npub,
+      {int length = NostrCrypto.kDefaultCallsignLength}) {
+    return _deriveCallsignFromNpub(npub, 'X1', length);
   }
 
   /// Derive station callsign from npub
-  /// Format: X3 + first 4 characters after 'npub1'
-  static String deriveStationCallsign(String npub) {
-    return _deriveCallsignFromNpub(npub, 'X3');
+  /// Format: X3 + the first [length] characters after 'npub1'
+  static String deriveStationCallsign(String npub,
+      {int length = NostrCrypto.kDefaultCallsignLength}) {
+    return _deriveCallsignFromNpub(npub, 'X3', length);
   }
 
   /// Derive callsign from npub with given prefix
-  /// Takes the first 4 characters after 'npub1' and uppercases them
-  static String _deriveCallsignFromNpub(String npub, String prefix) {
-    if (npub.length < 9 || !npub.toLowerCase().startsWith('npub1')) {
+  /// Takes the first [length] characters after 'npub1' and uppercases them
+  static String _deriveCallsignFromNpub(
+      String npub, String prefix, int length) {
+    if (length < NostrCrypto.kMinCallsignLength ||
+        length > NostrCrypto.kMaxCallsignLength) {
+      throw ArgumentError.value(length, 'length',
+          'callsign length must be ${NostrCrypto.kMinCallsignLength}..'
+              '${NostrCrypto.kMaxCallsignLength}');
+    }
+    if (npub.length < 5 + length || !npub.toLowerCase().startsWith('npub1')) {
       throw ArgumentError('Invalid npub format');
     }
 
-    // Extract first 4 characters after 'npub1' and uppercase
-    final suffix = npub.substring(5, 9).toUpperCase();
+    // Extract the first `length` characters after 'npub1' and uppercase
+    final suffix = npub.substring(5, 5 + length).toUpperCase();
 
     return '$prefix$suffix';
   }

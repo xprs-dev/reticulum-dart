@@ -227,13 +227,80 @@ class NostrCrypto {
     return HEX.encode(bytes);
   }
 
+  /// Shortest and longest callsign a holder may derive from their own key.
+  static const int kMinCallsignLength = 2;
+  static const int kMaxCallsignLength = 5;
+
+  /// The default, and what every callsign in the field is today.
+  static const int kDefaultCallsignLength = 4;
+
   /// Derive callsign from npub
-  /// Format: first 4 characters after 'npub1' (uppercased)
-  static String deriveCallsign(String publicKeyHex) {
+  ///
+  /// Format: the first [length] characters after 'npub1' (uppercased). The
+  /// holder chooses how much of their own key to show, between
+  /// [kMinCallsignLength] and [kMaxCallsignLength]; four is the default and
+  /// leaves every existing caller returning exactly what it returned before.
+  ///
+  /// Shorter is weaker, and knowingly so: two characters is 1024 values, so
+  /// two people collide after about forty of them and anyone can grind a
+  /// matching key in about a thousand tries. A callsign is a label, not an
+  /// identity (spec section 3) -- anything that must be unforgeable verifies a
+  /// signature against the full key.
+  static String deriveCallsign(String publicKeyHex,
+      {int length = kDefaultCallsignLength}) {
+    if (length < kMinCallsignLength || length > kMaxCallsignLength) {
+      throw ArgumentError.value(length, 'length',
+          'callsign length must be $kMinCallsignLength..$kMaxCallsignLength');
+    }
     // Encode to npub first, then extract characters
     final npub = encodeNpub(publicKeyHex);
-    // Return first 4 chars after 'npub1'
-    return npub.substring(5, 9).toUpperCase();
+    // Return the first `length` chars after 'npub1'
+    return npub.substring(5, 5 + length).toUpperCase();
+  }
+
+  /// The person, with any device suffix removed.
+  ///
+  /// `X1ABCD-1` and `X1ABCD-2` are two devices of one operator (spec section
+  /// 3.1), so everything keyed on a *person* -- a thread, a reputation, a
+  /// block, a follow -- keys on what this returns.
+  static String bareCallsign(String callsign) =>
+      callsign.trim().toUpperCase().split('-').first;
+
+  /// Whether [callsign] could have been derived from [publicKeyHex].
+  ///
+  /// Strips the device suffix first, then the `X1`/`X3`/`X4`/`X5` prefix, and
+  /// checks the remainder against the key's bech32 encoding at that length.
+  ///
+  /// **This answers "could this key produce this label", not "is this the
+  /// holder's callsign".** Given only a callsign and a key there is no way to
+  /// tell which length the holder chose, so all four truncations of one key
+  /// pass: a holder announcing `X1ABCD` also satisfies `X1AB` here.
+  ///
+  /// What makes a callsign canonical is the signed identity announcement that
+  /// declares it. Once that is verified, callsigns are compared as whole
+  /// strings -- never with [String.startsWith] -- and that comparison, not
+  /// this function, is what stops one person from wearing four names.
+  ///
+  /// Returns false for a callsign that is not self-derived -- a licensed
+  /// `CT1ABC-9` or `G0XYZ/P` carries no `X1/X3/X4/X5` prefix and is bound to a
+  /// key by other means (spec section 9.4.2), so this test does not apply.
+  static bool callsignMatchesKey(String callsign, String publicKeyHex) {
+    final bare = bareCallsign(callsign);
+    if (bare.length < 2) return false;
+    final prefix = bare.substring(0, 2);
+    if (prefix != 'X1' && prefix != 'X3' && prefix != 'X4' && prefix != 'X5') {
+      return false;
+    }
+    final chars = bare.substring(2);
+    if (chars.length < kMinCallsignLength ||
+        chars.length > kMaxCallsignLength) {
+      return false;
+    }
+    try {
+      return deriveCallsign(publicKeyHex, length: chars.length) == chars;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Create SHA256 hash of data
@@ -344,5 +411,10 @@ class NostrKeyPair {
   String get npub => NostrCrypto.encodeNpub(publicKeyHex);
 
   /// Get derived callsign (X1 + first 4 chars of npub after 'npub1')
-  String get callsign => 'X1${NostrCrypto.deriveCallsign(publicKeyHex)}';
+  String get callsign => callsignOfLength();
+
+  /// The same callsign at a chosen length, 2 to 5 (spec section 3).
+  String callsignOfLength(
+          {int length = NostrCrypto.kDefaultCallsignLength}) =>
+      'X1${NostrCrypto.deriveCallsign(publicKeyHex, length: length)}';
 }
