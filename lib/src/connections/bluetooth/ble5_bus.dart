@@ -119,6 +119,17 @@ class Ble5Bus {
   /// aired, so without this a device stays mute while reporting that it beacons.
   void Function(int status)? onAdvertFailed;
 
+  /// Whether the radio is switched on RIGHT NOW. Never cached — [supported]
+  /// answers a permanent question about the controller, and using that as a
+  /// liveness check means composing frames for a radio that is off.
+  Future<bool> adapterOn() async {
+    try {
+      return (await _method.invokeMethod<bool>('adapterOn')) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Whether the device supports BLE 5 extended advertising.
   Future<bool> supported() async {
     final cached = _supported;
@@ -163,6 +174,17 @@ class Ble5Bus {
   void onFrame(int subtype, void Function(Ble5Frame) handler) =>
       _handlers[subtype] = handler;
 
+  /// Whether anyone has asked for the shared extended scan, and whether the
+  /// native side confirmed it is up. Diagnostics only: the two disagreeing is
+  /// exactly the state that made the radio silently deaf, so both are reported.
+  bool get wantScan => _wantScan;
+  bool get scanning => _scanning;
+
+  /// Milliseconds since a frame last came off the scan, or null if never.
+  int? get msSinceLastFrame => _lastFrameMs == 0
+      ? null
+      : DateTime.now().millisecondsSinceEpoch - _lastFrameMs;
+
   /// Begin the shared extended scan (idempotent). Demuxes by subtype.
   Future<void> startScan() async {
     _wantScan = true;
@@ -184,12 +206,19 @@ class Ble5Bus {
     });
     try {
       final ok = await _method.invokeMethod<bool>('startScan');
-      _scanning = ok ?? true;
+      // `ok ?? true` used to latch _scanning on a null answer — the shape a
+      // MissingPluginException-free notImplemented gives back — after which the
+      // `if (_scanning) return` above made every retry a no-op forever. Only a
+      // literal true means the scan is up.
+      _scanning = ok == true;
       _scanStartMs = DateTime.now().millisecondsSinceEpoch;
-      if (ok == false) {
-        onLog?.call('BLE5: native startScan refused — watchdog will retry');
+      if (ok != true) {
+        onLog?.call('BLE5: native startScan refused ($ok) — watchdog will retry');
       }
-    } catch (_) {}
+    } catch (e) {
+      _scanning = false;
+      onLog?.call('BLE5: startScan failed: $e');
+    }
   }
 
   /// Register/refresh a keyed broadcast frame. Re-calling with the same [key]
@@ -344,7 +373,12 @@ class Ble5Bus {
       await _method.invokeMethod('stopScan');
     } catch (_) {}
     _scanning = false;
-    await _sub?.cancel();
-    _sub = null;
+    // The EventChannel subscription STAYS. Cancelling it fires onCancel on the
+    // native side, which nulls the sink every scan result is written to — so
+    // adverts kept arriving, kept being counted, and were thrown away one line
+    // later, with nothing anywhere saying so. That is what made the phone deaf
+    // for a whole session after a single GATT link. The subscription is inert
+    // while the native scan is stopped; keeping it costs nothing and means a
+    // restart is heard immediately.
   }
 }
