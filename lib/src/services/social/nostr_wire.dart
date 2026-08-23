@@ -2,7 +2,7 @@
  * NOSTR relay wire codec (NIP-01) — pure, transport-agnostic.
  *
  * The public NOSTR network frames its relay protocol as JSON arrays over a
- * WebSocket ("REQ"/"EVENT"/"EOSE"/"OK"/...). Aurora also carries the SAME logical
+ * WebSocket ("REQ"/"EVENT"/"EOSE"/"OK"/...). XPRS also carries the SAME logical
  * messages over Reticulum (msgpack ops, see relay_protocol.dart) and in-process
  * (the local RelayEventStore). This file is the ONE place that speaks the JSON
  * wire, so it can be unit-tested with zero sockets and reused by every WebSocket

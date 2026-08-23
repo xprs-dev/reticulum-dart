@@ -1,6 +1,6 @@
 # File sharing — hosting, finding by hash, finding by text
 
-Aurora shares files **by content, not by location**. A file is named by the
+XPRS shares files **by content, not by location**. A file is named by the
 SHA‑256 of its bytes; that hash is what travels in a chat message, what the DHT
 indexes, and what the receiver verifies on arrival. No IP address, no URL, and no
 central host is ever required.
@@ -24,7 +24,7 @@ Key code: [`shared_media_fetch.dart`](../lib/wapp/shared_media_fetch.dart),
 
 ## 1. How a file is referenced in chat (XPRS section 16)
 
-When you attach a file, Aurora hashes the bytes, stores them in a
+When you attach a file, XPRS hashes the bytes, stores them in a
 content‑addressed archive, and puts only **short, location‑independent tokens**
 into the message text:
 
@@ -80,7 +80,7 @@ When a chat message references a file the device doesn't already hold,
 | 2.5 | **I2P** — fetch from the sharer, else content‑route to any provider | No |
 | 4 | **BitTorrent** — join the swarm via `ih:` | No (DHT + trackers) |
 
-> **There is deliberately no public‑Blossom tier.** Aurora never depends on a
+> **There is deliberately no public‑Blossom tier.** XPRS never depends on a
 > third‑party central content host. (An earlier build had a public‑Blossom
 > fallback; it was removed.) Cross‑NAT reachability comes from the Reticulum
 > **hub**, which *relays transport packets* — it never sees or indexes content.
@@ -88,7 +88,7 @@ When a chat message references a file the device doesn't already hold,
 ### Why R1 before R2
 
 On a big *foreign* public Reticulum network the XOR‑closest DHT nodes to a file
-key are reference nodes that ignore Aurora's overlay, so DHT resolution can come
+key are reference nodes that ignore XPRS's overlay, so DHT resolution can come
 up empty there. The **sender is, by definition, a holder** of the file it just
 referenced, and you already learned its route from its announce — so a direct
 fetch from the sender is the most reliable cross‑network path. R2 (the DHT) is
@@ -140,7 +140,7 @@ hash and fetches in parallel — no central index. Full detail in [dht.md](dht.m
 
 ### Find‑by‑text (social relay, `lib/services/social/`)
 
-To discover a file you *don't* have the hash for, Aurora runs a NOSTR‑style relay
+To discover a file you *don't* have the hash for, XPRS runs a NOSTR‑style relay
 with a **SQLite FTS5** full‑text index (`relay_event_store.dart`):
 
 - A file is published as a **kind‑1063 metadata event**: tags
@@ -170,7 +170,7 @@ step needs a central server.
 ## 7. Mutable folders — a directory layer on top
 
 Files are immutable (a hash is forever a single set of bytes). To publish a
-*changing* collection, Aurora has **mutable folders** (`lib/services/folders/`):
+*changing* collection, XPRS has **mutable folders** (`lib/services/folders/`):
 
 - A folder is identified by a **secp256k1 public key** (`folderId`).
 - Its contents are a **signed op‑log** of NOSTR events

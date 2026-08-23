@@ -1,6 +1,6 @@
 /*
  * RelayEventStore — a NOSTR event database with full-text search, the storage
- * core of Aurora's distributed relay/indexer (see plan: distributed NOSTR-like
+ * core of XPRS's distributed relay/indexer (see plan: distributed NOSTR-like
  * relay over Reticulum).
  *
  * Everything in the social network is a signed NOSTR event ([NostrEvent],

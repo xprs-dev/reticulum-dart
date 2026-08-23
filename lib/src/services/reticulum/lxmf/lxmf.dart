@@ -1,7 +1,7 @@
 /*
  * LXMF constants (wire-compatible with markqvist/LXMF). LXMF is the messaging
  * layer Sideband / NomadNet / MeshChat speak on top of Reticulum; implementing it
- * lets Aurora interoperate with those projects.
+ * lets XPRS interoperate with those projects.
  */
 
 /// RNS app name for LXMF destinations.

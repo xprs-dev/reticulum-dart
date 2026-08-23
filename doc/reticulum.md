@@ -1,6 +1,6 @@
-# Reticulum (RNS) — Aurora's pure‑Dart implementation
+# Reticulum (RNS) — XPRS's pure‑Dart implementation
 
-Aurora ships a **wire‑compatible, pure‑Dart implementation of Reticulum 1.3.5**
+XPRS ships a **wire‑compatible, pure‑Dart implementation of Reticulum 1.3.5**
 ([markqvist/Reticulum](https://github.com/markqvist/Reticulum)). It interoperates
 with a reference `rnsd` and with Sideband/NomadNet over the same hubs. All code
 lives in [`lib/services/reticulum/`](../lib/services/reticulum/).
@@ -10,7 +10,7 @@ lives in [`lib/services/reticulum/`](../lib/services/reticulum/).
 > on network change, data-capable path selection), the failure modes + their log
 > symptoms, and a diagnostic recipe. NAT is not the blocker; read it before debugging.
 
-Reticulum gives Aurora three things the internet alone doesn't:
+Reticulum gives XPRS three things the internet alone doesn't:
 
 1. **Reachability across networks** — two phones behind carrier‑grade NAT can
    exchange data by both connecting *outbound* to a shared hub that relays
@@ -91,7 +91,7 @@ identity.hash = sha256(x25519_pub || ed25519_pub)[:16]
 dest_hash     = sha256(name_hash || identity.hash)[:16]
 ```
 
-Aurora uses distinct destinations for distinct services on the same identity,
+XPRS uses distinct destinations for distinct services on the same identity,
 e.g. `xprs.chat`, `xprs/files`, `xprs/dht` — so file transfers, DHT RPCs
 and chat each get their own addressable endpoint.
 
@@ -110,7 +110,7 @@ signed_data = dest_hash public_key name_hash random_hash [ratchet] app_data
 - `random_hash` is 5 random bytes + 5 big‑endian bytes of the Unix time — a
   freshness nonce, not pure randomness.
 - the signature is **Ed25519** over `signed_data`.
-- `app_data` is free‑form; Aurora puts the **device callsign** here, which is how
+- `app_data` is free‑form; XPRS puts the **device callsign** here, which is how
   a chat peer learns a callsign → RNS‑destination mapping.
 
 The transport validates an announce in two stages:
@@ -287,11 +287,11 @@ handle packets split across reads.
 
 ---
 
-## 9. What's wire‑compatible, what's Aurora‑specific
+## 9. What's wire‑compatible, what's XPRS‑specific
 
 - **Wire‑compatible with reference RNS:** packet/announce/link/resource formats,
   all crypto, hop‑by‑hop routing, HDLC, the Auto/local interface.
-- **Aurora‑specific (built *on* RNS, still over standard links/packets):** the
+- **XPRS‑specific (built *on* RNS, still over standard links/packets):** the
   file DHT ([dht.md](dht.md)), the LXMF router (`lxmf/`), and the social relay
   (`social/`). These define their own destinations/aspects (`xprs/dht`,
   `xprs/files`, …) and ride normal Reticulum links, so a reference RNS node

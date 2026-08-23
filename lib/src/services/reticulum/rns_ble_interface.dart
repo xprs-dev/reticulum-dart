@@ -17,7 +17,7 @@
  * and fall back to point-to-point when they are too large to advertise.
  *
  * Reassembly + selective-repeat (NACK)
- * reliability for the chunked broadcast live in the underlying radio (Aurora's
+ * reliability for the chunked broadcast live in the underlying radio (XPRS's
  * BleService); RNS provides confidentiality/auth on top, so the BLE transport
  * itself needs no pairing.
  *

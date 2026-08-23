@@ -1,5 +1,5 @@
 /*
- * Pure-Dart cryptographic primitives for the Aurora Reticulum (RNS) node.
+ * Pure-Dart cryptographic primitives for the XPRS app Reticulum (RNS) node.
  *
  * Wire-compatible with the canonical Python reference (markqvist/Reticulum,
  * pinned to RNS 1.3.5). Every primitive here mirrors a specific reference file:

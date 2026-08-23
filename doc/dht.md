@@ -1,6 +1,6 @@
 # The file DHT — finding *who has a file*, with no central server
 
-Aurora finds the providers of a content‑addressed file through a **Kademlia‑style
+XPRS finds the providers of a content‑addressed file through a **Kademlia‑style
 distributed hash table** that runs *over* Reticulum links. The code is in
 [`lib/services/files/dht/`](../lib/services/files/dht/) and the node that drives
 it is `FileTransferNode` ([`file_node.dart`](../lib/services/files/file_node.dart)).
@@ -91,7 +91,7 @@ full k internally (§2) and just truncates what it puts on the wire.
 
 Each RPC is a short‑lived **Reticulum link** to the peer's **RPC destination**.
 By default that is `xprs/dht`, but `FileTransferNode` takes `rpcApp`/
-`rpcAspects` config and Aurora points it at the **chat** destination
+`rpcAspects` config and XPRS points it at the **chat** destination
 (`xprs/chat`) — because the dedicated dht announce is dropped by the hubs'
 announce budget, leaving no transport path to it, while the chat announce
 propagates reliably (§8, §9). The Kademlia node id is still derived from
@@ -226,8 +226,8 @@ Exposed as `RnsService.dhtResolveFetch(fileHash)`.
 
 ## 8. Bootstrapping & membership — "which nodes run our DHT?"
 
-There is no dedicated bootstrap server, and there is no global registry of "Aurora
-nodes". This raises a real question, because **Aurora is (currently) the only
+There is no dedicated bootstrap server, and there is no global registry of "XPRS
+nodes". This raises a real question, because **XPRS is (currently) the only
 overlay running a DHT on Reticulum** — a public hub is full of Sideband,
 NomadNet and `rnsd` identities that do *not* run it. How does a node tell which
 peers can actually answer a DHT RPC?
@@ -236,7 +236,7 @@ peers can actually answer a DHT RPC?
 Reticulum announce advertises a *named destination* and is Ed25519‑signed; the
 destination hash cryptographically binds the name to the announcing identity
 (`dest_hash = sha256(name_hash || identity_hash)[:16]`, see
-[reticulum.md](reticulum.md) §2). An Aurora node announces `XPRS` destinations
+[reticulum.md](reticulum.md) §2). An XPRS node announces `XPRS` destinations
 (`xprs/files`, `xprs/chat`, …) that no other software announces, so their
 `name_hash` is unique to our overlay. (We no longer announce `xprs/dht` itself —
 DHT RPC rides the chat dest, §4 — but the id is still derived from it locally.)
@@ -269,13 +269,13 @@ is frequently the one that gets dropped while the same node's `chat` announce
 overlay membership *only* off `xprs/dht` was fragile — peers whose dht announce
 was dropped never joined the overlay and folder/file discovery silently failed.
 Matching any `XPRS` destination is still a cryptographic identity↔name proof,
-so non‑Aurora identities (Sideband/NomadNet/`rnsd`, which never announce a
+so non‑XPRS identities (Sideband/NomadNet/`rnsd`, which never announce a
 `XPRS` name) are still never added.
 
-Every Aurora node re‑announces its service destinations on an adaptive cadence
+Every XPRS node re‑announces its service destinations on an adaptive cadence
 (30 s when charging on Wi‑Fi/Ethernet, 5 min on battery/cellular — see
 [reticulum.md](reticulum.md) §3), so the table fills within an announce cycle of a
-peer coming into view; on a hub with no other Aurora nodes it simply stays empty
+peer coming into view; on a hub with no other XPRS nodes it simply stays empty
 and `resolve` returns nothing immediately instead of timing out on dead contacts.
 
 > **Knowing a peer ≠ being able to route to its DHT dest — so we route to its
@@ -283,7 +283,7 @@ and `resolve` returns nothing immediately instead of timing out on dead contacts
 > (hence its DHT id), and a transport path to its **chat** dest. The dedicated
 > `xprs/dht` dest is a *different* destination hash whose announce the hubs may
 > have dropped, leaving no path to it — historically why replication STOREs failed.
-> Aurora now runs the DHT RPC over the chat dest we already have a route to (§4),
+> XPRS now runs the DHT RPC over the chat dest we already have a route to (§4),
 > closing that gap; `_dhtRpcRaw` still skips a contact fast when even the configured
 > RPC dest has no route resolved.
 
@@ -347,7 +347,7 @@ the same serial‑query‑times‑timeout trap that produced the original hang. 
 The XOR‑closest set is mostly **ephemeral** here (phones that sleep), so a record
 can vanish on churn. To keep records alive on **always‑on** nodes without a wire
 change, the DHT uses *persistence anchors*: a small, stable set of holders the
-owner injects (`DhtNode.anchors`). Aurora feeds it the **relay indexers** from
+owner injects (`DhtNode.anchors`). XPRS feeds it the **relay indexers** from
 `RelayDirectory` filtered to a stable capacity class (`capacity ≤ kCapHomeWifi`),
 excluding self, top few by capacity/freshness — capacity is **already advertised**
 on the relay announce, so nothing new goes on the wire.
@@ -361,7 +361,7 @@ on the relay announce, so nothing new goes on the wire.
 This decouples persistence and findability from XOR distance. Two consequences:
 (a) records survive churn of the closest set; (b) it is the **enabler for shrinking
 `k`** (§2) — once anchors guarantee findability, the XOR‑walk can use a small
-Kademlia `k` as a secondary path. **Aurora runs `k=20`/`alpha=6`** on top of this
+Kademlia `k` as a secondary path. **XPRS runs `k=20`/`alpha=6`** on top of this
 (the library default stays a safe `96`/`12` for consumers without anchors). Note:
 anchors hold records for many keys, so an indexer reaches the anti‑abuse
 `maxStoredKeys` cap (§9) sooner — a higher cap for indexers is a future knob (the

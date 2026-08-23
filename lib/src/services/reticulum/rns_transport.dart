@@ -167,7 +167,7 @@ class RnsTransport implements RnsInterfaceRegistry {
   }
 
   // Announce name_hashes (10-byte, hex) that must NEVER be shed by the budget —
-  // our OWN overlay's destinations (e.g. Aurora chat/files/dht/relay). They're
+  // our OWN overlay's destinations (e.g. XPRS chat/files/dht/relay). They're
   // rare in the public-hub flood but essential for peer discovery; the host
   // fills this with RnsDestination.nameHash(app, aspects) for each. The name
   // hash is a constant per app+aspects, so one cheap lookup identifies them
@@ -885,7 +885,7 @@ class RnsTransport implements RnsInterfaceRegistry {
     // outbound traffic reaches the hub regardless.
     final destKey = _hex(p.destHash);
     // Exempt our own overlay's announces from the flood budget — otherwise the
-    // rare Aurora announces get shed amid hundreds of foreign ones a second and
+    // rare XPRS announces get shed amid hundreds of foreign ones a second and
     // nodes never learn each other's routes (no media fetch, no FEED backfill).
     if (!_paths.containsKey(destKey) &&
         !_isPriorityAnnounce(p) &&

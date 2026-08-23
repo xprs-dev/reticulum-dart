@@ -127,7 +127,7 @@ class FileTransferNode {
 
   /// Another tenant sharing the RPC (chat) destination: a link frame tagged for
   /// it (not [_kDhtFrame]) is handed here and the returned bytes are tagged back
-  /// and sent as the reply. Aurora wires this to the relay node so relay REQ/EVENT
+  /// and sent as the reply. XPRS wires this to the relay node so relay REQ/EVENT
   /// /SYNC links ride the same reliably-pathed chat dest without a second dest.
   /// The tag is [_kRelayFrame]; null = no other tenant (frame dropped as today).
   Future<Uint8List?> Function(Uint8List relayBody)? onRelayFrame;
@@ -270,7 +270,7 @@ class FileTransferNode {
       // consumer WITHOUT persistence anchors. A consumer that supplies anchors
       // (DhtNode.anchors / stableAnchors) can lower k well below the overlay size
       // — findability no longer depends on covering it, since resolve queries the
-      // anchors first regardless of distance/k (Aurora runs k=20/alpha=6). k/alpha
+      // anchors first regardless of distance/k (XPRS runs k=20/alpha=6). k/alpha
       // are constructor params so staging needs no library edit. Liveness eviction
       // (routing_table.dart) also trims the cost: dead/unreachable contacts drop, so the
       // covered set shrinks to live nodes. alpha is the per-round fan-out.
@@ -348,7 +348,7 @@ class FileTransferNode {
     rp(RnsDestination.hash(peer, kFilesApp, kFilesAspects));
   }
 
-  /// Number of confirmed Aurora DHT peers in the routing table (overlay
+  /// Number of confirmed XPRS DHT peers in the routing table (overlay
   /// membership). 0 means we've heard no other node's xprs/dht announce, so
   /// publish/resolve can only act locally — useful for diagnosing discovery.
   int get dhtRoutingSize => dht?.routing.size ?? 0;
@@ -361,7 +361,7 @@ class FileTransferNode {
   int get dhtStoresRejected => dht?.storesRejected ?? 0;
 
   /// Identity hashes of the DHT peers in the routing table (debug: lets us see
-  /// WHICH Aurora nodes are in the overlay, to diagnose discovery convergence).
+  /// WHICH XPRS nodes are in the overlay, to diagnose discovery convergence).
   List<String> get dhtPeerHexes =>
       dht?.routing.contacts.map((c) => c.identity.hexHash).toList() ??
       const <String>[];
@@ -376,7 +376,7 @@ class FileTransferNode {
         await _acceptLink(p, arrivalHwMtu);
         return true;
       }
-      // Accept DHT links on the configured RPC dest (the chat dest in Aurora; the
+      // Accept DHT links on the configured RPC dest (the chat dest in XPRS; the
       // xprs/dht dest by default). The files dest is matched first above and
       // the dests are disjoint, so a real file link is never mis-accepted as DHT.
       if (dht != null &&

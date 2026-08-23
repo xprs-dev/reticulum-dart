@@ -45,7 +45,7 @@ class RnsLanInterface implements RnsInterface {
   @override
   int get speedRank => 3;
 
-  final int port; // shared listen + send port (all Aurora nodes use the same)
+  final int port; // shared listen + send port (all XPRS nodes use the same)
   final String broadcastHost;
   final void Function(Uint8List packetRaw) onPacket;
   final void Function(String msg)? log;

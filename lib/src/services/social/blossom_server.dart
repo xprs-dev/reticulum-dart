@@ -44,7 +44,7 @@ class BlossomServer {
 
   static const int defaultPort = 3457;
 
-  /// GET / banner identifying an Aurora Blossom server to a LAN scanner.
+  /// GET / banner identifying an XPRS Blossom server to a LAN scanner.
   static const String _banner = '{"app":"aurora-blossom","v":1}';
 
   HttpServer? _server;
@@ -130,7 +130,7 @@ class BlossomServer {
         res.statusCode = HttpStatus.noContent;
       } else if ((req.method == 'GET' || req.method == 'HEAD') &&
           (path == '/' || path == '/id')) {
-        // Discovery banner: lets a LAN scanner recognise an Aurora Blossom
+        // Discovery banner: lets a LAN scanner recognise an XPRS Blossom
         // server (GET / → this marker) without probing for a specific hash.
         res.headers.contentType = ContentType.json;
         res.statusCode = HttpStatus.ok;
@@ -459,7 +459,7 @@ class BlossomServer {
   }
 
   // ── LAN Blossom directory ────────────────────────────────────────────────
-  // A cached list of reachable Aurora Blossom servers on the local network,
+  // A cached list of reachable XPRS Blossom servers on the local network,
   // refreshed by a periodic scan (driven by the Files wapp). Media resolution
   // queries these KNOWN servers for a hash — cheap, vs scanning the whole /24
   // on every file link.
@@ -475,7 +475,7 @@ class BlossomServer {
         .toList(growable: false);
   }
 
-  /// Probe the local /24(s) for Aurora Blossom servers (GET / → banner) and
+  /// Probe the local /24(s) for XPRS Blossom servers (GET / → banner) and
   /// refresh the directory. Returns the current reachable base URLs. This is
   /// the routine LAN scan — run periodically, NOT per file link.
   static Future<List<String>> discoverLan({

@@ -137,7 +137,7 @@ class RelayNode {
 
   /// When the RPC dest is SHARED with another tenant (the DHT owns the chat dest
   /// and accepts its links first), our link frames must carry a 1-byte type tag
-  /// so the host can demux them to us. Null = dedicated dest, no tag. Aurora sets
+  /// so the host can demux them to us. Null = dedicated dest, no tag. XPRS sets
   /// [kRelayRpcTag]. The tag rides only OUR outbound requests + their responses;
   /// the local relay-dest path ([_serve]) stays untagged for back-compat.
   final int? rpcTag;
@@ -168,7 +168,7 @@ class RelayNode {
     this.admitEvent,
     this.selfPubHex,
     this.probeQuery,
-    // Default to the dedicated relay dest (back-compat); Aurora overrides these
+    // Default to the dedicated relay dest (back-compat); XPRS overrides these
     // to the chat dest so links route where paths actually exist.
     this.rpcApp = kRelayApp,
     this.rpcAspects = kRelayAspects,
@@ -193,7 +193,7 @@ class RelayNode {
             RnsCrypto.constantTimeEquals(p.destHash, rpcDestHash)) &&
         _answersQueries) {
       // Accept relay links on the dedicated relay dest AND on the configured RPC
-      // dest (the chat dest in Aurora). The dests are disjoint when overridden,
+      // dest (the chat dest in XPRS). The dests are disjoint when overridden,
       // and a peer that only has a path to our chat dest dials that one.
       await _accept(p);
       return true;

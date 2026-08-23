@@ -61,7 +61,7 @@ export 'src/services/social/spam.dart';
 export 'src/services/social/store_forward.dart';
 
 // ── Participation coin (Chaumian ecash + permissioned ATM ledger) ───────
-// WIP; the Aurora coin host bridges consume these directly.
+// WIP; the XPRS app coin host bridges consume these directly.
 export 'src/services/coin/coin_ec.dart';
 export 'src/services/coin/coin_keyset.dart';
 export 'src/services/coin/bearer_token.dart';

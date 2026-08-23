@@ -1,4 +1,4 @@
-# Aurora participation coin
+# XPRS participation coin
 
 A spec for the cryptocurrency layer on top of XPRS/aurora. It rewards genuine
 participation and deters spammers, while staying usable on a decentralized,

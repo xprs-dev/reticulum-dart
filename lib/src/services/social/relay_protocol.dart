@@ -1,5 +1,5 @@
 /*
- * RelayProtocol — wire framing for Aurora's NOSTR relay over Reticulum.
+ * RelayProtocol — wire framing for XPRS's NOSTR relay over Reticulum.
  *
  * NIP-01/45/50 semantics, but msgpack-framed (reuse lxmf_msgpack) and carried
  * over an RnsLink instead of a websocket. Each frame is a msgpack array whose

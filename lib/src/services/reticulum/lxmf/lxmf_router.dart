@@ -149,7 +149,7 @@ class LxmfRouter {
   final Map<String, List<Uint8List>> _mailbox = {}; // recipientHex -> [packed]
   final Map<String, _PropIn> _propIn = {};
   final Map<String, _PropOut> _propOut = {};
-  // Link contexts for the sync protocol (Aurora<->Aurora; outside RNS-reserved).
+  // Link contexts for the sync protocol (XPRS<->XPRS; outside RNS-reserved).
   // The held-message batch itself rides a standard RNS resource over the link.
   static const int _ctxSyncReq = 0x10; // initiator -> responder: "messages for me"
   static const int _ctxSyncMsg = 0x11; // responder -> initiator: ONE held message

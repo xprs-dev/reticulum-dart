@@ -1,7 +1,7 @@
 # Making two devices find each other on Reticulum
 
 This is the hard-won checklist for **device-to-device reachability** — what has to
-be true for one Aurora node to discover and fetch from another over the public
+be true for one XPRS node to discover and fetch from another over the public
 internet (DHT lookups, folder discovery by key, file fetch, relay queries). It was
 derived by debugging "the wapp store can't see the folder hosted on the phone" to
 a working device-to-device fetch over the internet, and it exists so we never
@@ -27,7 +27,7 @@ For node A to reach node B over the internet, ALL of these must hold:
    UDP discovery interface) must never shadow the hub path in the route table, or
    links to the peer time out.
 
-If all three hold, the Aurora DHT overlay forms (each node hears one of the
+If all three hold, the XPRS app DHT overlay forms (each node hears one of the
 other's signed `XPRS` announces — `dht`, `files`, **or** `chat` — and adds it
 as a routing-table contact; see [dht.md](dht.md) §8), `resolve` finds holders, and
 links/fetches complete. (Note: provider records mostly do **not** replicate to
@@ -50,7 +50,7 @@ above. Do not chase NAT.
 
 | Symptom (logs / API) | Real cause | Fix |
 |---|---|---|
-| Host logs `RNS/files: publish <key> -> 0 holders` forever; consumer `folder/browse` returns 0 files | The two nodes are on **different hubs** that don't bridge; no Aurora peer is reachable to store/answer provider records | Mesh to all hubs (req. 1). After the fix the host logs `-> 1 holders` and resolve works |
+| Host logs `RNS/files: publish <key> -> 0 holders` forever; consumer `folder/browse` returns 0 files | The two nodes are on **different hubs** that don't bridge; no XPRS peer is reachable to store/answer provider records | Mesh to all hubs (req. 1). After the fix the host logs `-> 1 holders` and resolve works |
 | After the device changes network, `status.up` stays `true` but nothing flows; `RemoteApi: ... TCP interface not connected` | RNS connected once at boot and never reconnected; stale uplink | Auto-reconnect (req. 2) |
 | Direct fetch by callsign times out: `RNS/files: files: fetch timeout` then `resolved 0 provider(s)`, even though announces arrive | The route to the peer is via an **announce-only LAN path** (no data) or the peer simply isn't reachable on a shared hub | Path-selection fix (req. 3) + mesh (req. 1) |
 | Consumer only ever logs `rx from <peer> via lan`, never `via tcp` | The peer is on the **same LAN** (co-located). The LAN path forms but the hub data path doesn't (split-horizon) | Test internet discovery with the host OFF the LAN (see caveat) |
@@ -68,7 +68,7 @@ above. Do not chase NAT.
 2. **Find a holder:** `DhtNode.resolve(key)` walks the routing table; a node answers
    `FIND_VALUE` with any provider record it holds **locally, regardless of XOR
    distance** (dht_node.dart). On a small overlay `closest()` returns *all* known
-   Aurora peers, so a consumer that has the host in its table will query it and get
+   XPRS peers, so a consumer that has the host in its table will query it and get
    the record. (For folders the key is the folderId pubkey; see
    [mutable-folders.md](mutable-folders.md).)
 3. **Move the bytes:** a Link to the holder's `xprs/files` destination, carrying a
