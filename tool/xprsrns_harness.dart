@@ -5,7 +5,7 @@
 /// NOT an automated test -- it listens for 28 minutes. To run it on a bench:
 ///   cp tool/xprsrns_harness.dart test/xprsrns_bench_test.dart
 ///   flutter test test/xprsrns_bench_test.dart
-/// and point the board's config at this machine: cfg set rns_hub <ip>:4243
+/// and point the board's config at this machine: cfg set rns_hub <ip>   (port defaults to 4242, Reticulum's own)
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -33,8 +33,8 @@ class Reg implements RnsInterfaceRegistry {
 
 void main() {
   test('xprsrns bench harness', () async {
-    final args = <String>['4243', 'X3R8XX'];
-  final port = int.parse(args.isNotEmpty ? args[0] : '4243');
+    final args = <String>['4242', 'X3R8XX'];
+  final port = int.parse(args.isNotEmpty ? args[0] : '4242');
   final askDest = args.length > 1 ? args[1] : '';
   final me = await RnsIdentity.generate();
   final wappName = RnsDestination.nameHash('xprs', ['wapp']);
