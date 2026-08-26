@@ -44,10 +44,19 @@ class Ble5Bus {
   Ble5Bus._();
   static final Ble5Bus instance = Ble5Bus._();
 
-  /// Max payload that fits one extended advert here (leaves envelope headroom).
-  /// APRS caps a message well under this (250 chars + metadata); longer content
-  /// is split into multiline frames by the wapp.
-  static const int maxFrame = 450;
+  /// Local ceiling on one extended advert, in bytes.
+  ///
+  /// This is a LOCAL bound, not a protocol one: BLE5 extended advertising
+  /// permits 1650 bytes across chained AUX PDUs, and the real limit is whatever
+  /// the controller reports at runtime — [maxPayload] is
+  /// `min(leMaximumAdvertisingDataLength - 8, maxFrame)`, so a modest device
+  /// still caps itself correctly.
+  ///
+  /// It sat at 450 with a note in docs/ble5.md saying to raise it when a device
+  /// reporting the full 1650 appeared. One has: the C61 reports
+  /// `maxDataLen: 1650` and was being held to 450 by this constant alone, on
+  /// the device with the MOST headroom on the bench.
+  static const int maxFrame = 1650;
 
   static const MethodChannel _method =
       MethodChannel('com.xprs.app/ble5');
