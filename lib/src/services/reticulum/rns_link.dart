@@ -40,6 +40,10 @@ class RnsLink {
   // Default [kRnsMtu] (500) for peers/interfaces that don't do discovery.
   int mtu = kRnsMtu;
 
+  /// The hardware ceiling of OUR first hop, remembered from [offerMtu] so the
+  /// responder's echo can never raise the link above what we can transmit.
+  int _localHwCap = kRnsLinkMtuMax;
+
   // Our ephemeral keys for this link. The X25519 pair MUST be fresh per link —
   // it is the ECDH half, and reuse would destroy forward secrecy.
   late final Uint8List _xPrv;
@@ -352,7 +356,7 @@ class RnsLink {
 
     // Adopt the MTU the responder confirmed (was parsed-then-discarded before).
     // Without signalling this stays at the 500 default. Clamp for safety.
-    mtu = _negotiatedMtu(confirmedMtu, kRnsLinkMtuMax);
+    mtu = _negotiatedMtu(confirmedMtu, _localHwCap);
 
     // Derive the session key.
     final shared = await RnsCrypto.x25519Shared(_xPrv, Uint8List.fromList(peerPub));
@@ -421,17 +425,51 @@ class RnsLink {
   // see _hashmapMaxLen in rns_resource.dart. Only [resourceSdu] scales with MTU.
 
   /// Resolve a negotiated link MTU: the smaller of what was offered and what our
-  /// side can carry ([ourCap], the return/next-hop interface HW MTU), bounded by
-  /// the discovery ceiling and never below the 500-byte protocol MTU floor.
+  /// side can carry ([ourCap], the return/next-hop interface HW MTU), bounded
+  /// above by the discovery ceiling and below only by [kRnsLinkMtuMin].
+  ///
+  /// It may legitimately land BELOW the 500-byte protocol MTU — that is the
+  /// point on a narrow medium. Over BLE it settles at the XPRS packet ceiling
+  /// of 250, which makes [resourceSdu] 214 and a part packet exactly 250 bytes:
+  /// one BLE5 extended advertisement, one LoRa packet.
   static int _negotiatedMtu(int offered, int ourCap) {
+    // The smaller of what the peer offered and what our own first hop can put
+    // on the air. Both figures are hardware truth; neither may be exceeded.
+    //
+    // This used to end with `m < kRnsMtu ? kRnsMtu : m`, an unconditional floor
+    // at the 500-byte protocol MTU, which threw away the entire point of MTU
+    // discovery on any medium narrower than that. Over BLE both ends correctly
+    // offered their controller's figure (296 usable on one phone, 450 on the
+    // other) and the negotiation raised the link back to 500. Every resource
+    // part was then built at 500 bytes, exceeded the broadcast cap, and was
+    // dropped by the interface before it ever reached the radio -- which is why
+    // the radio reported zero advertisement refusals while a transfer sat at
+    // parts=0/142 forever. Measured phone to phone: 64 KB, not one part in five
+    // minutes.
+    //
+    // RnsBleInterface.hardwareMtu exists precisely to report a sub-500 medium
+    // honestly, so that Reticulum fragments a Resource over the link instead of
+    // the transport inventing its own fragmentation. Flooring the value back up
+    // made that report unreachable.
+    //
+    // The floor that remains is a sanity bound: a link too small to hold a
+    // packet header is not a link. It never RAISES the negotiated value above
+    // either side's hardware.
     final m = math.min(offered, math.min(ourCap, kRnsLinkMtuMax));
-    return m < kRnsMtu ? kRnsMtu : m;
+    return m < kRnsLinkMtuMin ? kRnsLinkMtuMin : m;
   }
 
   /// Initiator: set the link MTU to OFFER in the request (= the next-hop
   /// interface HW MTU, capped at the ceiling, floored at the protocol MTU). Call
   /// before [buildRequest]; the responder caps it again and echoes the result.
-  void offerMtu(int nextHopHwMtu) => mtu = _negotiatedMtu(nextHopHwMtu, kRnsLinkMtuMax);
+  void offerMtu(int nextHopHwMtu) {
+    // Remember our own medium's ceiling: [confirm] used to clamp only by
+    // kRnsLinkMtuMax, so a responder that echoed a larger value (because it had
+    // no idea what OUR first hop is) put the link back above what our radio can
+    // put on the air.
+    _localHwCap = nextHopHwMtu;
+    mtu = _negotiatedMtu(nextHopHwMtu, kRnsLinkMtuMax);
+  }
 
   /// Is this packet addressed to this link (dest LINK, hash == link_id)?
   bool ownsPacket(RnsPacket p) =>

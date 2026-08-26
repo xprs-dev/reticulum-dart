@@ -27,7 +27,7 @@
  */
 import 'dart:typed_data';
 
-import 'rns_packet.dart' show kRnsMtu;
+import 'rns_packet.dart' show kXprsMaxPacket;
 import 'rns_transport.dart';
 
 /// A packet radio with a connectionless broadcast medium (one transmission ->
@@ -61,19 +61,25 @@ class RnsBleInterface implements RnsInterface {
   bool get announceOnly => false;
   @override
   int get speedRank => 1; // BLE: slowest data medium
-  /// What this radio can ACTUALLY carry in one frame.
+  /// 250 bytes. Fixed, on every device.
   ///
-  /// This used to claim the 500-byte protocol MTU, which is what `hardwareMtu`
-  /// exists to correct: RNS sizes links and resources to the medium, and a
-  /// medium that promises 500 while its controller allows ~296 makes the stack
-  /// build packets the radio then refuses. Telling the truth here is what lets
-  /// Reticulum do its own fragmenting (a Resource over a link) instead of the
-  /// transport inventing one.
+  /// XPRS.md section 4: "The maximum packet is 250 bytes on every transport.
+  /// This fits one LoRa packet, one BLE5 extended advertisement, and the
+  /// store-and-forward buffer of the smallest station."
+  ///
+  /// It is deliberately NOT the controller's reported ceiling. Those differ per
+  /// device -- 296 usable bytes on one phone here, 450 on another, 184 on a
+  /// tablet -- and a link sized to whichever end negotiated first is a link the
+  /// other end, or the ESP32 in the middle, cannot carry. The interoperable
+  /// figure is the specified one, and it is the same everywhere.
+  ///
+  /// It also used to claim the 500-byte protocol MTU, which is what
+  /// `hardwareMtu` exists to correct: RNS sizes links and resources to the
+  /// medium, and a medium that promises 500 builds packets this radio then
+  /// refuses. Telling the truth here is what lets Reticulum fragment a Resource
+  /// over the link instead of the transport inventing its own fragmentation.
   @override
-  int get hardwareMtu {
-    final cap = radio.broadcastCap;
-    return (cap > 0 && cap < kRnsMtu) ? cap : kRnsMtu;
-  }
+  int get hardwareMtu => kXprsMaxPacket;
 
   final RnsBleRadio radio;
   @override

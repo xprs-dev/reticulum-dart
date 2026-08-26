@@ -21,6 +21,17 @@ const int kRnsMtu = 500;
 /// Upper bound a link may negotiate via MTU discovery — matches reference RNS
 /// `TCPInterface.HW_MTU = 262144`. Bounds the packet-size guard below.
 const int kRnsLinkMtuMax = 262144;
+/// The XPRS packet ceiling: 250 bytes on every transport (XPRS.md section 4).
+/// One LoRa packet, one BLE5 extended advertisement, and the store-and-forward
+/// buffer of the smallest station. Fixed for every device — a per-controller
+/// figure is not interoperable.
+const int kXprsMaxPacket = 250;
+/// Lower bound a link may negotiate DOWN to. MTU discovery must be able to go
+/// below [kRnsMtu]: a BLE controller reports ~296 usable bytes per extended
+/// advertisement, and a link that claims 500 on such a medium builds resource
+/// parts the interface then drops. This is only a sanity bound — a link too
+/// small to carry a packet header plus a useful payload is not a link.
+const int kRnsLinkMtuMin = 128;
 const int kRnsDestHashBytes = 16;
 
 class RnsPacketType {
