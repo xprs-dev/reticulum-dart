@@ -547,6 +547,12 @@ class NostrClient {
     _fromEngine.close();
   }
 
+  /// Last message the isolate guard reported, and how many identical ones it
+  /// has swallowed since. Static because the guard outlives every object here.
+  static String _lastGuardMsg = '';
+  static int _lastGuardMs = 0;
+  static int _guardRepeats = 0;
+
   // ══ engine isolate ════════════════════════════════════════════════════════
   static Future<void> _engineMain(_EngineInit init) async {
     // Guard the whole isolate. An unhandled async error here is FATAL by
@@ -579,7 +585,27 @@ class NostrClient {
         if (m is Map) engine.handle(m.cast<String, dynamic>());
       });
     }, (e, st) {
-      init.toMain.send({'log': 'nostr-engine: unhandled $e'});
+      // COALESCED, and that is not tidiness. This sent one port message to
+      // main per error, and the error above is one dart:io produces in a tight
+      // loop: measured on a phone, 800 identical lines in 56 ms -- about
+      // 14,000 messages a second, each one an allocation on main and a row in
+      // a log ring that has held 50 MB before now (docs/performance.md 3.3).
+      // The guard is meant to keep the isolate alive, not to hand the main
+      // isolate a denial of service; an error that repeats is one fact,
+      // however many times it happens.
+      final msg = 'nostr-engine: unhandled $e';
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (msg == _lastGuardMsg && now - _lastGuardMs < 5000) {
+        _guardRepeats++;
+        return;
+      }
+      final repeated = _guardRepeats;
+      _lastGuardMsg = msg;
+      _lastGuardMs = now;
+      _guardRepeats = 0;
+      init.toMain.send({
+        'log': repeated > 0 ? '$msg (x${repeated + 1} suppressed)' : msg,
+      });
     });
   }
 }
