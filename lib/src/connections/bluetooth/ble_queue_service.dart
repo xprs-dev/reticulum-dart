@@ -15,6 +15,77 @@ import 'ble_parcel.dart';
 // no MonitoredPeriodicTimer) and logging goes through debugPrint.
 void _log(String m) => debugPrint(m);
 
+/// Per-parcel accounting, summarised instead of narrated.
+///
+/// Every parcel, every receipt and every send used to get its own line. That is
+/// the shape docs/performance.md 8.7 is about: a log ring is bounded in ROWS,
+/// not in cost, so a component writing one line per parcel does not merely pay
+/// an allocation per parcel — it evicts everything else. Measured during a
+/// 56 MB transfer between two phones: the transfer's own progress lines were
+/// gone from a 500-line window within minutes, leaving "Received parcel 1 for
+/// IE" over and over. The one buffer that could have explained the transfer was
+/// full of the transfer.
+///
+/// So the hot paths count, and one line a minute says what the counters did —
+/// and only when they did something. What keeps a line of its own is what a
+/// person can act on: a message dropped after its retries, a peer muted for
+/// never receipting, a parse failure.
+class _QueueCounters {
+  int parcelsRx = 0;
+  int parcelsTx = 0;
+  int receiptsRx = 0;
+  int receiptsTx = 0;
+  int msgsIn = 0;
+  int msgsOut = 0;
+  int retransmits = 0;
+  int timeouts = 0;
+  int retries = 0;
+  int gaps = 0;
+
+  bool get quiet =>
+      parcelsRx == 0 &&
+      parcelsTx == 0 &&
+      receiptsRx == 0 &&
+      receiptsTx == 0 &&
+      msgsIn == 0 &&
+      msgsOut == 0 &&
+      retransmits == 0 &&
+      timeouts == 0 &&
+      retries == 0 &&
+      gaps == 0;
+
+  void reset() {
+    parcelsRx = parcelsTx = receiptsRx = receiptsTx = 0;
+    msgsIn = msgsOut = retransmits = timeouts = 0;
+    retries = gaps = 0;
+  }
+
+  @override
+  String toString() => 'perf: ble-queue parcels=$parcelsRx/$parcelsTx '
+      'receipts=$receiptsRx/$receiptsTx msgs=$msgsIn/$msgsOut '
+      'retransmit=$retransmits timeout=$timeouts retry=$retries gap=$gaps';
+}
+
+final _counters = _QueueCounters();
+
+/// Narrate every message again. Off by default: the counters are the normal
+/// view, and a per-message line is what evicted the log during a bulk transfer.
+bool _verbose = false;
+set bleQueueVerbose(bool v) => _verbose = v;
+bool get bleQueueVerbose => _verbose;
+const Duration _summaryEvery = Duration(seconds: 60);
+DateTime _lastSummary = DateTime.fromMillisecondsSinceEpoch(0);
+
+/// Emit the counter summary when one is due and there is anything to say.
+void _noteActivity() {
+  final now = DateTime.now();
+  if (now.difference(_lastSummary) < _summaryEvery) return;
+  _lastSummary = now;
+  if (_counters.quiet) return;
+  _log(_counters.toString());
+  _counters.reset();
+}
+
 /// Callback for sending a parcel over BLE
 typedef SendParcelCallback = Future<void> Function(
   String deviceId,
@@ -127,7 +198,7 @@ class BLEQueueService {
           // Request missing parcels
           final missing = incoming.missingParcels;
           if (missing.isNotEmpty) {
-            _log('BLEQueue: Requesting ${missing.length} missing parcels for ${incoming.msgId}');
+            _counters.gaps += missing.length;
             _sendReceipt(deviceId, BLEReceipt.missing(incoming.msgId, missing));
             // Update last request time to avoid spamming
             incoming.markParcelRequestSent();
@@ -224,8 +295,6 @@ class BLEQueueService {
     _outgoingQueues.putIfAbsent(deviceId, () => Queue());
     _outgoingQueues[deviceId]!.add(message);
 
-    _log('BLEQueue: Enqueued message ${message.msgId} '
-        'for $deviceId (${message.payload.length} bytes)');
 
     // Start processing if not already sending
     if (_isSending[deviceId] != true) {
@@ -257,7 +326,7 @@ class BLEQueueService {
         if (success) {
           queue.removeFirst();
           _markReceipted(deviceId); // success == a receipt arrived
-          _log('BLEQueue: Message ${message.msgId} sent successfully');
+          _counters.msgsOut++;
         } else {
           message.retryCount++;
           if (message.retryCount >= BLEParcelConstants.maxRetries) {
@@ -275,8 +344,7 @@ class BLEQueueService {
               }
             }
           } else {
-            _log('BLEQueue: Message ${message.msgId} failed, '
-                'retry ${message.retryCount}/${BLEParcelConstants.maxRetries}');
+            _counters.retries++;
             // Wait before retry
             await Future.delayed(const Duration(milliseconds: 1000));
           }
@@ -290,8 +358,6 @@ class BLEQueueService {
   /// Send a single message with parcel protocol
   Future<bool> _sendMessage(String deviceId, BLEOutgoingMessage message) async {
     final parcels = message.toParcels();
-    _log('BLEQueue: Sending message ${message.msgId} '
-        'in ${parcels.length} parcels');
 
     // Retain the parcels for potential retransmission requests
     _sentMessages[message.msgId] = _SentMessageRecord(
@@ -329,6 +395,7 @@ class BLEQueueService {
 
         try {
           await _sendCallback!(deviceId, parcel.toBytes());
+          _counters.parcelsTx++;
           parcelsSent++;
 
           // Intra-parcel delay
@@ -338,7 +405,7 @@ class BLEQueueService {
 
           // Listen window every N parcels
           if (parcelsSent % BLEParcelConstants.parcelsBeforePause == 0) {
-            _log('BLEQueue: Listen window after $parcelsSent parcels');
+            // (counted, not narrated: this fires every few parcels)
             await _listenWindow();
           }
         } catch (e) {
@@ -351,20 +418,19 @@ class BLEQueueService {
       final receipt = await receiptFuture;
 
       if (receipt == null) {
-        _log('BLEQueue: No receipt received for ${message.msgId}');
+        _counters.timeouts++;
         return false;
       }
 
       switch (receipt.status) {
         case BLEReceiptStatus.complete:
-          _log('BLEQueue: Message ${message.msgId} confirmed complete');
+          _counters.msgsOut++;
           // Keep in retention cache for a while in case of delayed retransmit requests
           return true;
 
         case BLEReceiptStatus.missing:
           parcelsToSend = receipt.missingParcels ?? [];
-          _log('BLEQueue: Retransmitting ${parcelsToSend.length} '
-              'missing parcels: $parcelsToSend');
+          _counters.retransmits += parcelsToSend.length;
           break;
 
         case BLEReceiptStatus.checksumFailed:
@@ -395,7 +461,7 @@ class BLEQueueService {
             milliseconds: timeoutMs ?? BLEParcelConstants.receiptTimeoutMs))
         .then<BLEReceipt?>((r) => r)
         .catchError((_) {
-          _log('BLEQueue: Receipt timeout for $msgId');
+          _counters.timeouts++;
           return null;
         })
         .whenComplete(() => _pendingReceipts.remove(msgId));
@@ -427,8 +493,8 @@ class BLEQueueService {
 
   /// Handle an incoming receipt
   void _handleReceipt(BLEReceipt receipt) {
-    _log('BLEQueue: Received receipt for ${receipt.msgId}: '
-        '${receipt.status.name}');
+    _counters.receiptsRx++;
+    _noteActivity();
 
     // First check if we're waiting for this receipt (during active send)
     final completer = _pendingReceipts[receipt.msgId];
@@ -455,8 +521,11 @@ class BLEQueueService {
     final missingIndices = receipt.missingParcels ?? [];
     if (missingIndices.isEmpty) return;
 
-    _log('BLEQueue: Retransmitting ${missingIndices.length} parcels '
-        'for ${receipt.msgId} (delayed request)');
+    _counters.retransmits += missingIndices.length;
+    if (_verbose) {
+      _log('BLEQueue: Retransmitting ${missingIndices.length} parcels '
+          'for ${receipt.msgId} (delayed request)');
+    }
 
     for (final idx in missingIndices) {
       if (idx >= 0 && idx < record.parcels.length) {
@@ -511,8 +580,10 @@ class BLEQueueService {
       final compressionInfo = header.isCompressed
           ? ', compressed with algorithm ${header.compressionAlgorithm}'
           : '';
-      _log('BLEQueue: Started receiving ${header.msgId} '
-          '(${header.totalParcels} parcels expected$compressionInfo)');
+      if (_verbose) {
+        _log('BLEQueue: Started receiving ${header.msgId} '
+            '(${header.totalParcels} parcels expected$compressionInfo)');
+      }
       if (incoming.isComplete) _finalizeIncomingMessage(deviceId, incoming);
       return;
     }
@@ -524,7 +595,8 @@ class BLEQueueService {
       return;
     }
     existing.addParcel(dp);
-    _log('BLEQueue: Received parcel ${dp.parcelNum} for $msgId');
+    _counters.parcelsRx++;
+    _noteActivity();
     if (existing.isComplete) _finalizeIncomingMessage(deviceId, existing);
   }
 
@@ -533,8 +605,7 @@ class BLEQueueService {
     final assembled = incoming.assemble();
 
     if (assembled != null) {
-      _log('BLEQueue: Message ${incoming.msgId} complete, '
-          'checksum verified (${assembled.length} bytes)');
+      _counters.msgsIn++;
 
       // Send complete receipt
       _sendReceipt(deviceId, BLEReceipt.complete(incoming.msgId));
@@ -561,8 +632,7 @@ class BLEQueueService {
     try {
       final data = utf8.encode(jsonEncode(receipt.toJson()));
       await _sendCallback!(deviceId, Uint8List.fromList(data));
-      _log('BLEQueue: Sent receipt for ${receipt.msgId}: '
-          '${receipt.status.name}');
+      _counters.receiptsTx++;
     } catch (e) {
       _log('BLEQueue: Failed to send receipt: $e');
     }
