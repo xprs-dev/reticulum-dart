@@ -192,7 +192,20 @@ class NostrWsClient implements NostrRelayClient {
     _setStatus(NostrRelayStatus.error);
     _sub?.cancel();
     _sub = null;
+    // CLOSE THE SOCKET, not just the subscription. Cancelling the stream
+    // listener does nothing to the TCP connection underneath: after the
+    // relay's own close it sat in CLOSE_WAIT -- their FIN answered by
+    // nothing -- and after the idle watchdog cycled it, it stayed fully
+    // open with nobody reading. Every reconnect leaked one. Measured on
+    // the Linux desktop after five hours: 1,323 sockets, 359 of them to one
+    // relay, all through this line. The sink close is what sends our FIN.
+    final ch = _ch;
     _ch = null;
+    if (ch != null) {
+      try {
+        ch.sink.close();
+      } catch (_) {}
+    }
     log?.call('$uri down: $why');
     // Reconnect with capped exponential backoff; live subs are replayed above.
     _retry?.cancel();
