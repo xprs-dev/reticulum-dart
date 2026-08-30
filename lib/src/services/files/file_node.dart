@@ -1158,12 +1158,22 @@ class FileTransferNode {
   /// Advertise ourselves as a provider of an arbitrary 32-byte DHT [key] (e.g. a
   /// folder id), independent of the file serve-quota — folders are metadata, not
   /// bulk bytes, so they should always be discoverable. Remembered for republish.
-  Future<int> publishKey(Uint8List key, {int capacity = kCapUnknown}) async {
+  ///
+  /// [manifestHash] is the sha256 of the file's piece-hash list, when the
+  /// publisher has one. It is what lets a downloader that knows ONLY the file's
+  /// sha256 — the updater, given a hash by a feed — find the list and fetch in
+  /// pieces from every holder at once instead of the whole file from one.
+  Future<int> publishKey(Uint8List key,
+      {int capacity = kCapUnknown, Uint8List? manifestHash}) async {
     final d = dht;
     if (d == null) return 0;
-    _providedKeys[_hex(key)] = _Provided(Uint8List.fromList(key), capacity, null);
+    _providedKeys[_hex(key)] =
+        _Provided(Uint8List.fromList(key), capacity, manifestHash);
     final rec = await ProviderRecord.create(
-        providerIdentity: identity, sha256: key, capacity: capacity);
+        providerIdentity: identity,
+        sha256: key,
+        capacity: capacity,
+        manifestHash: manifestHash);
     return d.publish(rec);
   }
 
@@ -1196,7 +1206,10 @@ class FileTransferNode {
     if (d != null) {
       for (final p in _providedKeys.values.toList()) {
         final rec = await ProviderRecord.create(
-            providerIdentity: identity, sha256: p.sha, capacity: p.capacity);
+            providerIdentity: identity,
+            sha256: p.sha,
+            capacity: p.capacity,
+            manifestHash: p.manifestHash);
         await d.publish(rec);
       }
     }
