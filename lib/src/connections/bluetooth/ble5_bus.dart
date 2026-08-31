@@ -372,6 +372,25 @@ class Ble5Bus {
     } catch (_) {}
   }
 
+  /// Scan window/interval as a BATTERY dial. 0 LOW_POWER (~0.5 s look every
+  /// 5 s), 1 BALANCED (the default, ~2 s of every 3), 2 LOW_LATENCY.
+  ///
+  /// This never stops the scan — stopping it took delivery from 10-of-10 to
+  /// 0-of-10 once (docs/ble5.md 4) and nothing about power management is worth
+  /// that. A wider window only makes hearing slower, which store-and-forward
+  /// and the courier re-transmits already absorb (docs/mesh.md 2).
+  ///
+  /// A mode change restarts the scan natively, and Android throttles an app to
+  /// roughly five scan starts per thirty seconds: callers must change this
+  /// RARELY (the app's PowerState holds a one-minute dwell per tier).
+  Future<void> setScanMode(int mode) async {
+    try {
+      await _method.invokeMethod('setScanMode', {'mode': mode});
+    } catch (e) {
+      onLog?.call('BLE5: setScanMode($mode) failed: $e');
+    }
+  }
+
   Future<void> stopScan() async {
     // Stopping is a DECISION, not a failure: the caller stops the scan to give
     // the radio to a GATT session. Leaving _wantScan set meant this object's own
