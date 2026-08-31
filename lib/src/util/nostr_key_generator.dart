@@ -41,6 +41,15 @@ class NostrKeyGenerator {
     return _deriveCallsignFromNpub(npub, 'X3', length);
   }
 
+  /// Derive a movable-station callsign (ship, aircraft, bus, car).
+  ///
+  /// Format: X2 + the first [length] characters after 'npub1'
+  /// (XPRS.md section 3: X2 moves, X3 stays where it is).
+  static String deriveMobileCallsign(String npub,
+      {int length = NostrCrypto.kDefaultCallsignLength}) {
+    return _deriveCallsignFromNpub(npub, 'X2', length);
+  }
+
   /// Derive callsign from npub with given prefix
   /// Takes the first [length] characters after 'npub1' and uppercases them
   static String _deriveCallsignFromNpub(

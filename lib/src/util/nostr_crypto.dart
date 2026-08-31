@@ -288,7 +288,11 @@ class NostrCrypto {
     final bare = bareCallsign(callsign);
     if (bare.length < 2) return false;
     final prefix = bare.substring(0, 2);
-    if (prefix != 'X1' && prefix != 'X3' && prefix != 'X4' && prefix != 'X5') {
+    if (prefix != 'X1' &&
+        prefix != 'X2' &&
+        prefix != 'X3' &&
+        prefix != 'X4' &&
+        prefix != 'X5') {
       return false;
     }
     final chars = bare.substring(2);
