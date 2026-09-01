@@ -131,6 +131,14 @@ class BLEQueueService {
   /// Pending receipt completers per message
   final Map<String, Completer<BLEReceipt>> _pendingReceipts = {};
 
+  /// True while the parcel lane has work in flight: queued outbound parcels
+  /// or a sent message still awaiting its receipt. The mesh session's polite
+  /// goodbye consults this before dropping the GATT link the two lanes
+  /// share -- a BYE mid-parcel used to kill the transfer under it.
+  bool get busy =>
+      _pendingReceipts.isNotEmpty ||
+      _outgoingQueues.values.any((q) => q.isNotEmpty);
+
   /// Callback to actually send data over BLE
   SendParcelCallback? _sendCallback;
 
