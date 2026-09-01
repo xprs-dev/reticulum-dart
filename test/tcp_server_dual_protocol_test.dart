@@ -3,7 +3,6 @@
  * first byte decides. 0x7E = HDLC-framed Reticulum; printable text goes to
  * the plain-text sink; a silent client is assumed Reticulum after the wait.
  */
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';

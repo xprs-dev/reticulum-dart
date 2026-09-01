@@ -3,7 +3,6 @@
 // t:message for a third-party callsign over the wapp lane -- the internet
 // sender of docs/XPRS.md 36.12. Not CI: it needs the node on the bench.
 //   args: host, port, dest callsign
-import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 

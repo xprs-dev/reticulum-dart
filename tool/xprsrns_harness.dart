@@ -1,14 +1,13 @@
-/// Bench harness for the ESP32 `geogram_xprsrns` bearer: an RNS TCP server
-/// peer that accepts the board's uplink, prints every XPRS wire announced on
-/// the xprs.wapp lane, and answers the first sighting with one cmd:history.
-///
-/// NOT an automated test -- it listens for 28 minutes. To run it on a bench:
-///   cp tool/xprsrns_harness.dart test/xprsrns_bench_test.dart
-///   flutter test test/xprsrns_bench_test.dart
-/// and point the board's config at this machine: cfg set rns_hub <ip>   (port defaults to 4242, Reticulum's own)
+// Bench harness for the ESP32 `geogram_xprsrns` bearer: an RNS TCP server
+// peer that accepts the board's uplink, prints every XPRS wire announced on
+// the xprs.wapp lane, and answers the first sighting with one cmd:history.
+//
+// NOT an automated test -- it listens for 28 minutes. To run it on a bench:
+//   cp tool/xprsrns_harness.dart test/xprsrns_bench_test.dart
+//   flutter test test/xprsrns_bench_test.dart
+// and point the board's config at this machine: cfg set rns_hub <ip>   (port defaults to 4242, Reticulum's own)
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:reticulum/reticulum.dart';
