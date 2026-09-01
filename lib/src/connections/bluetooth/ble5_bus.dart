@@ -116,6 +116,14 @@ class Ble5Bus {
   // stack, unlike the two Flutter plugins whose dual-role confused Android's GATT
   // handle cache.
   void Function()? onGattConnected; // our client link is up + ready
+
+  /// Negotiated ATT MTU of the last client link (23 until the peer says
+  /// more) and of the served link. A session must size its frames to
+  /// `mtu - 3`; the old hardcoded 509 lost every frame against a 247-MTU
+  /// station.
+  int clientMtu = 23;
+  int serverMtu = 23;
+  bool clientLinkUp = false;
   void Function()? onGattDisconnected; // our client link dropped
   void Function(Uint8List data)? onGattData; // client received on FFF2 (receipts)
   void Function(String address, String callsign)? onGattDiscovered; // peer beacon
@@ -293,9 +301,14 @@ class Ble5Bus {
       final addr = (event['address'] as String?) ?? '';
       switch (event['event']) {
         case 'connected':
+          final m = event['mtu'];
+          if (m is int && m >= 23) clientMtu = m;
+          clientLinkUp = true;
           onGattConnected?.call();
           break;
         case 'disconnected':
+          clientLinkUp = false;
+          clientMtu = 23;
           onGattDisconnected?.call();
           break;
         case 'data':
@@ -304,6 +317,10 @@ class Ble5Bus {
           break;
         case 'discovered':
           onGattDiscovered?.call(addr, (event['callsign'] as String?) ?? '');
+          break;
+        case 'server_mtu':
+          final sm = event['mtu'];
+          if (sm is int && sm >= 23) serverMtu = sm;
           break;
         case 'server_data':
           final d = bytes(event['data']);
