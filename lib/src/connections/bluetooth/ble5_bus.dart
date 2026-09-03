@@ -58,6 +58,22 @@ class Ble5Bus {
   /// the device with the MOST headroom on the bench.
   static const int maxFrame = 1650;
 
+  /// What an XPRS STATION can actually parse out of one advert.
+  ///
+  /// A broadcast is sized for the weakest receiver in the room, and on this
+  /// network that is every ESP32: `xprsble.c` copies an advertising report into
+  /// a 254-byte buffer, TRUNCATING anything longer, and the AD walk then breaks
+  /// on the mangled length and returns — no log, no counter, no clue. Usable
+  /// payload is 254 less the six bytes of envelope (AD length + AD type +
+  /// company id + marker + subtype) = 248, which the firmware names
+  /// `XPRSBLE_WIRE_MAX`.
+  ///
+  /// Android reports far more — 296 usable on the bench phone — so without this
+  /// clamp the size router happily builds a 296-byte advert that the controller
+  /// transmits and every station silently discards. firmware/docs/ble5.md
+  /// records the mismatch; this is the side that has to respect it.
+  static const int stationParseMax = 248;
+
   static const MethodChannel _method =
       MethodChannel('com.xprs.app/ble5');
   static const EventChannel _scan =
@@ -172,15 +188,21 @@ class Ble5Bus {
         // admission check, aired nowhere, while the app went on believing it
         // was broadcasting.
         if (n != null && n >= 20) {
-          _maxPayload = n < maxFrame ? n : maxFrame;
-          onLog?.call('BLE5: controller carries ${_maxPayload}B per advert');
+          final controller = n < maxFrame ? n : maxFrame;
+          // The smaller of what this radio can send and what a station can
+          // read. Sending more is not "more range", it is silence.
+          _maxPayload =
+              controller < stationParseMax ? controller : stationParseMax;
+          onLog?.call('BLE5: controller carries ${controller}B per advert, '
+              'using ${_maxPayload}B (a station parses at most '
+              '${stationParseMax}B)');
         }
       } catch (_) {}
     }
     return ok;
   }
 
-  int _maxPayload = maxFrame;
+  int _maxPayload = stationParseMax;
 
   /// Largest payload one extended advert can carry ON THIS DEVICE — the
   /// effective broadcast cap for the size router (≤ [maxFrame]). Valid after
