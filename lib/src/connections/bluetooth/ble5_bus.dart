@@ -152,6 +152,13 @@ class Ble5Bus {
   /// aired, so without this a device stays mute while reporting that it beacons.
   void Function(int status)? onAdvertFailed;
 
+  /// The Bluetooth stack under us came (back) up: Android restarted it after a
+  /// crash, or the user switched it off and on. The native side has already
+  /// rebuilt the advertising set and the scan; [restarts] is the count so far.
+  /// Without this, a set whose process had died kept "airing" into a dead
+  /// binder for a night (TANK2, 2026-09-04) while reporting advOnAir.
+  void Function(int restarts)? onAdapterRestarted;
+
   /// Whether the radio is switched on RIGHT NOW. Never cached — [supported]
   /// answers a permanent question about the controller, and using that as a
   /// liveness check means composing frames for a radio that is off.
@@ -358,6 +365,9 @@ class Ble5Bus {
           _advertFailures++;
           _advertLastError = 'startAdvertisingSet status=${event['status']}';
           onAdvertFailed?.call((event['status'] as int?) ?? -1);
+          break;
+        case 'adapterRestarted':
+          onAdapterRestarted?.call((event['restarts'] as int?) ?? 0);
           break;
       }
     });
