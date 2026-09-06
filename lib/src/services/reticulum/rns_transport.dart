@@ -145,23 +145,58 @@ class RnsTransport implements RnsInterfaceRegistry {
   static const int _annBudgetWindowMs = 3000;
   int _annWindowStart = 0;
   int _annCount = 0;
-  // Global ceiling on REAL Ed25519 verifications per window, across every
-  // announce class — including known-destination re-announces and priority
-  // announces, which bypass the new-destination budget above. A re-announce
-  // whose app_data changed (uptime fields churn every announce) misses the
-  // trustIf fast-path and costs a full verify, so without this ceiling a busy
-  // hub's known-dest flood keeps the crypto pipeline saturated forever.
+  // Ceiling on REAL Ed25519 verifications per window for FOREIGN announces —
+  // known-destination re-announces included (a re-announce whose app_data churned
+  // misses the trustIf fast-path and costs a full verify), so a busy hub's flood
+  // can't keep the crypto pipeline saturated. Priority (our own overlay)
+  // announces draw from a SEPARATE budget of the same size below, so foreign
+  // churn can't starve them. Same size serves both.
   static const int _verifyBudgetPerWindow = 8;
   int _verifyWindowStart = 0;
   int _verifyCount = 0;
 
-  bool _takeVerifyToken() {
+  // Priority announces (our OWN overlay dests — chat/files/dht/relay/lxmf/wapp)
+  // get a SEPARATE verify allowance so a foreign hub's flood exhausting the
+  // general budget above cannot shed one. Without this, an inbound XPRS 1:1
+  // (which rides an `xprs/wapp` announce carrying fresh app_data, so it always
+  // needs a real verify) was dropped on a busy node whenever the general budget
+  // was spent on foreign churn — the measured cause of intermittent phone→phone
+  // delivery. It is a SEPARATE budget, not an exemption, because
+  // `_isPriorityAnnounce` matches a public, spoofable name_hash: a forged fld of
+  // our overlay's name_hash is thus still bounded to this window and cannot peg
+  // the crypto pipeline. Our own overlay announces are few, so the real traffic
+  // always fits.
+  int _priVerifyWindowStart = 0;
+  int _priVerifyCount = 0;
+
+  // Announces shed for want of a verify token, by class. Read for diagnostics
+  // (`/api/rns/status`): a climbing [priVerifyBudgetShed] means real overlay
+  // traffic is being dropped and this budget is too small for the load.
+  int verifyBudgetShed = 0;
+  int priVerifyBudgetShed = 0;
+
+  bool _takeVerifyToken({bool priority = false}) {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (priority) {
+      if (nowMs - _priVerifyWindowStart >= _annBudgetWindowMs) {
+        _priVerifyWindowStart = nowMs;
+        _priVerifyCount = 0;
+      }
+      if (_priVerifyCount >= _verifyBudgetPerWindow) {
+        priVerifyBudgetShed++;
+        return false;
+      }
+      _priVerifyCount++;
+      return true;
+    }
     if (nowMs - _verifyWindowStart >= _annBudgetWindowMs) {
       _verifyWindowStart = nowMs;
       _verifyCount = 0;
     }
-    if (_verifyCount >= _verifyBudgetPerWindow) return false;
+    if (_verifyCount >= _verifyBudgetPerWindow) {
+      verifyBudgetShed++;
+      return false;
+    }
     _verifyCount++;
     return true;
   }
@@ -911,7 +946,9 @@ class RnsTransport implements RnsInterfaceRegistry {
     // priority announces included. Exhausted budget = shed the packet; the
     // destination re-announces periodically, nothing is lost but freshness.
     final needsCrypto = !wouldTrustAnnounce(p, trusted);
-    if (needsCrypto && !_takeVerifyToken()) return null;
+    if (needsCrypto && !_takeVerifyToken(priority: _isPriorityAnnounce(p))) {
+      return null;
+    }
 
     final ann = await validateAnnounce(p, trustIf: trusted);
     if (ann == null) return null;

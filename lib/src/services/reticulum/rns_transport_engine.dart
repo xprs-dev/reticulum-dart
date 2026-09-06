@@ -57,6 +57,8 @@ class RnsTransportClient implements RnsInterfaceRegistry {
 
   bool _passive = false;
   double _annRate = 0;
+  int _verifyShed = 0;
+  int _priVerifyShed = 0;
   Uint8List? _transportIdValue;
   bool _edgeBridgeValue = false;
 
@@ -143,6 +145,10 @@ class RnsTransportClient implements RnsInterfaceRegistry {
       case 'stats':
         _passive = msg[1] as bool;
         _annRate = msg[2] as double;
+        if (msg.length > 5) {
+          _verifyShed = msg[4] as int;
+          _priVerifyShed = msg[5] as int;
+        }
         try {
           onStats?.call();
         } catch (_) {}
@@ -177,6 +183,13 @@ class RnsTransportClient implements RnsInterfaceRegistry {
 
   bool get passive => _passive;
   double get announceRatePerSec => _annRate;
+
+  /// Announces dropped for want of a verify token since start, split by class:
+  /// [verifyBudgetShed] foreign announces, [priVerifyBudgetShed] our own overlay
+  /// (chat/files/dht/relay/lxmf/wapp). A climbing priority count means real 1:1
+  /// traffic is being shed and the priority verify budget is too small.
+  int get verifyBudgetShed => _verifyShed;
+  int get priVerifyBudgetShed => _priVerifyShed;
 
   // ── interfaces (external — sockets/radios stay with the owner) ───────────
 
@@ -359,6 +372,8 @@ Future<void> _engineBody(SendPort toMain) async {
       transport.passive,
       transport.announceRatePerSec,
       transport.pathCount,
+      transport.verifyBudgetShed,
+      transport.priVerifyBudgetShed,
     ]);
     final since = lastSweepMs;
     lastSweepMs = DateTime.now().millisecondsSinceEpoch;
