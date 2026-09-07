@@ -39,6 +39,13 @@ class RelayCap {
   /// never has to guess or wait on a timeout: peers without this bit keep
   /// getting links exactly as before, so old and new nodes interoperate.
   static const int probe = 1 << 4;
+
+  /// Acts as a Reticulum TRANSPORT hub for its neighbours: forwards packets and
+  /// links, rebroadcasts announces across all its interfaces, and accepts LAN
+  /// clients — so nearby stations route through it instead of each dialling a
+  /// third-party hub whose announce rate-limits they would otherwise trip.
+  /// Advertised only by an unlimited (mains + Wi-Fi/Ethernet) node.
+  static const int transport = 1 << 5;
 }
 
 // Wire caps so a single relay announce stays well within the ~350B app_data
@@ -141,7 +148,10 @@ class RelayAnnouncement {
     var caps = RelayCap.search |
         RelayCap.firehose |
         RelayCap.storeForward |
-        RelayCap.probe;
+        RelayCap.probe |
+        // An unlimited node also carries its neighbours' traffic (a transport
+        // hub): the same power + fixed link that lets it index lets it forward.
+        RelayCap.transport;
     // Top-tier (pinned archive / home fiber) widen toward a full archive.
     final wide = interests.wide || profile.capacity <= kCapHomeFiber;
     if (wide) caps |= RelayCap.archive;
