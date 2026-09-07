@@ -363,4 +363,143 @@ class XprsCrypto {
     }
     return out;
   }
+
+  // ── §9.2.1 redacted packets: obfuscated ((...)) spans ─────────────────
+  //
+  // Each ((secret)) becomes a run of the block bar █ (U+2588), one per hidden
+  // character, in place. The hidden pieces travel in `xr:` = base64url(no pad)
+  // of nonce(12) ‖ AES-128-CTR ciphertext of "->" followed by the pieces, one
+  // line per bar run in packet order. Key = first 16 bytes of
+  // PBKDF2-HMAC-SHA256(passphrase, "xprs-xr" ‖ nonce, 100000). Success is the
+  // "->" sentinel: a wrong passphrase yields garbage that fails it. The default
+  // passphrase is sixteen '#': obfuscation, not secrecy — anyone can decrypt it,
+  // but each message still costs the full derivation.
+
+  static const String kXrDefaultPassphrase = '################';
+  static const int _xrBarRune = 0x2588; // █
+
+  static Uint8List _randBytes(int n) {
+    final b = Uint8List(n);
+    for (var i = 0; i < n; i++) {
+      b[i] = _rng.nextInt(256);
+    }
+    return b;
+  }
+
+  /// PBKDF2-HMAC-SHA256(passphrase, "xprs-xr" ‖ nonce, 100000), first 16 bytes.
+  static Uint8List xrKey(String passphrase, Uint8List nonce) {
+    final salt = Uint8List.fromList([...utf8.encode('xprs-xr'), ...nonce]);
+    final kdf = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
+      ..init(Pbkdf2Parameters(salt, 100000, 16));
+    return kdf.process(Uint8List.fromList(utf8.encode(passphrase)));
+  }
+
+  /// AES-128-CTR with a 16-byte IV = nonce(12) ‖ 32-bit big-endian counter
+  /// from zero. CTR is symmetric, so this both encrypts and decrypts.
+  static Uint8List _xrCipher(Uint8List key, Uint8List nonce, Uint8List data) {
+    final iv = Uint8List(16)..setRange(0, 12, nonce); // low four bytes = 0
+    final c = CTRStreamCipher(AESEngine())
+      ..init(true, ParametersWithIV(KeyParameter(key), iv));
+    return c.process(data);
+  }
+
+  static String _b64urlEnc(Uint8List b) =>
+      base64Url.encode(b).replaceAll('=', '');
+  static Uint8List? _b64urlDec(String s) {
+    try {
+      final pad = (4 - s.length % 4) % 4;
+      return base64Url.decode(s + ('=' * pad));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Turn authored text with ((...)) marks into barred text plus the `xr:` blob
+  /// (base64url, no padding). Chat only ever redacts the message body, so the
+  /// bar runs here ARE the packet's runs, in order. Returns null when there is
+  /// nothing marked. [nonce] is random unless supplied (tests pin it).
+  static (String barred, String xr)? redact(String authored,
+      {String passphrase = kXrDefaultPassphrase, Uint8List? nonce}) {
+    final barred = StringBuffer();
+    final secrets = <String>[];
+    var i = 0;
+    while (i < authored.length) {
+      final open = authored.indexOf('((', i);
+      if (open < 0) {
+        barred.write(authored.substring(i));
+        break;
+      }
+      final close = authored.indexOf('))', open + 2);
+      if (close < 0) {
+        barred.write(authored.substring(i));
+        break;
+      }
+      barred.write(authored.substring(i, open));
+      final secret = authored.substring(open + 2, close);
+      barred.write(String.fromCharCode(_xrBarRune) * secret.runes.length);
+      secrets.add(secret);
+      i = close + 2;
+    }
+    if (secrets.isEmpty) return null;
+    final nz = nonce ?? _randBytes(12);
+    final plain = Uint8List.fromList(utf8.encode('->${secrets.join('\n')}'));
+    final ct = _xrCipher(xrKey(passphrase, nz), nz, plain);
+    return (barred.toString(), _b64urlEnc(Uint8List.fromList([...nz, ...ct])));
+  }
+
+  /// Decrypt an `xr:` blob to its hidden pieces (one per bar run, in packet
+  /// order). Returns null on a wrong passphrase (no "->" sentinel) or a
+  /// malformed blob. This is the RIGHT-KEY test; tampering is the signature's.
+  static List<String>? xrSecrets(String xr, String passphrase) {
+    final blob = _b64urlDec(xr);
+    if (blob == null || blob.length < 12) return null;
+    final nonce = Uint8List.fromList(blob.sublist(0, 12));
+    final ct = Uint8List.fromList(blob.sublist(12));
+    final pt = _xrCipher(xrKey(passphrase, nonce), nonce, ct);
+    String text;
+    try {
+      text = utf8.decode(pt);
+    } catch (_) {
+      return null;
+    }
+    if (!text.startsWith('->')) return null;
+    final rest = text.substring(2);
+    return rest.isEmpty ? <String>[] : rest.split('\n');
+  }
+
+  /// Refill the █ runs in [barred] (a whole wire, or a single value) from the
+  /// [xr] pieces, in order. Each piece must have EXACTLY its run's character
+  /// count (a hundred-letter line cannot fill a three-bar hole), and every
+  /// piece must be consumed. Returns the restored string, or null if the
+  /// passphrase is wrong or the structure does not line up — in which case the
+  /// caller keeps the bars.
+  static String? restore(String barred, String xr, String passphrase) {
+    final pieces = xrSecrets(xr, passphrase);
+    if (pieces == null) return null;
+    final runes = barred.runes.toList();
+    final out = StringBuffer();
+    var pi = 0, k = 0;
+    while (k < runes.length) {
+      if (runes[k] == _xrBarRune) {
+        var len = 0;
+        while (k < runes.length && runes[k] == _xrBarRune) {
+          len++;
+          k++;
+        }
+        if (pi >= pieces.length) return null;
+        final piece = pieces[pi++];
+        if (piece.runes.length != len) return null;
+        out.write(piece);
+      } else {
+        out.writeCharCode(runes[k]);
+        k++;
+      }
+    }
+    if (pi != pieces.length) return null; // more pieces than holes
+    return out.toString();
+  }
+
+  /// True when [text] carries at least one redaction bar.
+  static bool hasBars(String text) => text.contains('█');
+
 }
