@@ -131,6 +131,10 @@ class LxmfRouter {
   /// must not block delivery on asymmetric/quiet hubs. Default: drop.
   final bool Function(LxmfMessage message)? acceptUnverified;
 
+  /// Connectionless single packets to our delivery destination that opened —
+  /// the packet-lane file chunks arrive this way.
+  int singlePacketsOpened = 0;
+
   late final Uint8List deliveryDestHash =
       RnsDestination.hash(identity, kLxmfApp, kLxmfDeliveryAspects);
 
@@ -213,6 +217,8 @@ class LxmfRouter {
         RnsCrypto.constantTimeEquals(p.destHash, deliveryDestHash)) {
       try {
         final plain = await identity.decrypt(p.data);
+        singlePacketsOpened++;
+        log?.call('lxmf: single packet to us (${p.data.length} B) opened');
         await _deliver(plain);
         return true;
       } catch (e) {
