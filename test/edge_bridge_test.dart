@@ -12,14 +12,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reticulum/reticulum.dart';
 
 class _FakeIface extends RnsInterface {
-  _FakeIface(this._label, {bool edge = false}) : _edge = edge;
+  _FakeIface(this._label, {bool edge = false, bool uplink = false})
+      : _edge = edge,
+        _uplink = uplink;
   final String _label;
   final bool _edge;
+  final bool _uplink;
   final List<Uint8List> sent = [];
   @override
   String get label => _label;
   @override
   bool get edge => _edge;
+  @override
+  bool get uplink => _uplink;
   @override
   void send(Uint8List raw) => sent.add(raw);
 }
@@ -114,6 +119,40 @@ void main() {
       expect(await t.ingest(ann, 'ble'), isNotNull);
       expect(core.sent.length, 1);
       expect(edge.sent.length, 0);
+    });
+
+    test('an announce from one hub is never re-uploaded to another hub', () async {
+      final hubA = _FakeIface('tcp:a', uplink: true);
+      final hubB = _FakeIface('tcp:b', uplink: true);
+      final lan = _FakeIface('lan');
+      final t = RnsTransport(transportId: Uint8List(16))
+        ..edgeQuiet = true
+        ..addInterface(hubA)
+        ..addInterface(hubB)
+        ..addInterface(lan);
+
+      final ann = await _announce();
+      expect(await t.ingest(ann, 'tcp:a'), isNotNull);
+      expect(hubB.sent, isEmpty,
+          reason: 'the hubs carry the same flood; a phone that is a client of '
+              'both is not their bridge, and pays for every copy');
+      expect(lan.sent.length, 1, reason: 'local peers still learn it');
+    });
+
+    test('a LOCAL peer\'s announce still goes up to every hub', () async {
+      final hubA = _FakeIface('tcp:a', uplink: true);
+      final hubB = _FakeIface('tcp:b', uplink: true);
+      final lan = _FakeIface('lan');
+      final t = RnsTransport(transportId: Uint8List(16))
+        ..edgeQuiet = true
+        ..addInterface(hubA)
+        ..addInterface(hubB)
+        ..addInterface(lan);
+
+      final ann = await _announce();
+      expect(await t.ingest(ann, 'lan'), isNotNull);
+      expect(hubA.sent.length, 1);
+      expect(hubB.sent.length, 1);
     });
   });
 }

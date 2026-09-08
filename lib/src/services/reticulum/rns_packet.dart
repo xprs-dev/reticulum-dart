@@ -32,6 +32,12 @@ const int kXprsMaxPacket = 250;
 /// parts the interface then drops. This is only a sanity bound — a link too
 /// small to carry a packet header plus a useful payload is not a link.
 const int kRnsLinkMtuMin = 128;
+/// The most plaintext one connectionless SINGLE-destination packet can carry
+/// at the protocol MTU (reference RNS `Packet.ENCRYPTED_MDU`): 500 minus the
+/// 35-byte HEADER_2, minus the 80 bytes of ephemeral key + IV + HMAC, rounded
+/// down to the AES block. A datagram over this needs a link; nothing in the
+/// codec refuses it, so the sender must.
+const int kRnsEncryptedMdu = 383;
 const int kRnsDestHashBytes = 16;
 
 class RnsPacketType {

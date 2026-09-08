@@ -57,6 +57,14 @@ abstract class RnsInterface {
   /// flood back onto an edge — that would saturate BLE and starve APRS. Default
   /// false.
   bool get edge => false;
+
+  /// True for a client connection to a SHARED transport somebody else runs (a
+  /// public hub). An announce heard on one uplink is never re-aired onto
+  /// another: the hubs carry the same flood already, and a phone that is a
+  /// client of four of them is not their bridge. Everything local (LAN, BLE,
+  /// a hub we run ourselves) stays false, so local peers still reach every
+  /// uplink. Default false.
+  bool get uplink => false;
 }
 
 /// Where we last heard an identity, and how confident we still are about it.
@@ -508,7 +516,18 @@ class RnsTransport implements RnsInterfaceRegistry {
       context: context,
       transportId: toTransport ? path!.nextHop : null,
     );
-    sendOnAll(pkt.pack());
+    // The path says which interface leads there; write the packet on that one
+    // and nothing else. Writing it on every interface (the old behaviour) put
+    // each chunk of a file on every hub uplink, the LAN and BLE at once: five
+    // copies for one destination, four of them wasted, and on a metered or
+    // shared bearer paid for. Only with no path at all is a broadcast the
+    // right answer, since then a directly attached neighbour may forward it.
+    final out = path == null ? null : _ifaceByLabel(path.via);
+    if (out != null) {
+      out.send(pkt.pack());
+    } else {
+      sendOnAll(pkt.pack());
+    }
   }
 
   /// Diagnostic: the routing details of our path to [destHash] (next hop, the
@@ -1319,6 +1338,14 @@ class RnsTransport implements RnsInterfaceRegistry {
     if (tid == null) return;
     if (pathHops >= kRnsMaxHops) return;
     var others = _interfaces.where((i) => i.label != via);
+    // An announce that arrived from a shared transport is not carried to
+    // another shared transport: they hold the same flood, so the copies are
+    // pure upload, and a hub's announce budget charges us for them. Local
+    // peers (LAN, BLE, our own hub) still go up to every uplink.
+    final viaIfaceForUplink = _ifaceByLabel(via);
+    if (viaIfaceForUplink?.uplink ?? false) {
+      others = others.where((i) => !i.uplink);
+    }
     if (edgeQuiet) {
       // Carry everything onward, but never onto a bearer that cannot afford
       // the flood.

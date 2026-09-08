@@ -434,6 +434,18 @@ class LxmfRouter {
       return;
     }
     var src = identityForDest?.call(m.sourceHash);
+    if (src == null && (acceptUnverified?.call(m) ?? false)) {
+      // A payload that authenticates itself at the app layer (a signed XPRS
+      // wire) needs no LXMF-layer signature check, so it needs no wait either.
+      // This used to sit AFTER the twelve-second path poll below: a receiver
+      // that had never heard the sender's announce paid twelve seconds per
+      // packet, three hundred times for one small file. Still ask for the
+      // path, so the reply has somewhere to go.
+      requestPath?.call(m.sourceHash);
+      log?.call('lxmf: unknown source, self-authenticating payload — delivering');
+      onMessage?.call(m);
+      return;
+    }
     if (src == null && requestPath != null) {
       // We received a message but never heard the sender's announce (common on
       // busy/asymmetric public hubs). Pull the source's path so we can resolve

@@ -58,6 +58,8 @@ abstract class RnsBleRadio {
 /// An [RnsInterface] that carries RNS over a broadcast-capable BLE radio.
 class RnsBleInterface implements RnsInterface {
   @override
+  bool get uplink => false;
+  @override
   bool get announceOnly => false;
   @override
   int get speedRank => 1; // BLE: slowest data medium

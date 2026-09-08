@@ -222,6 +222,7 @@ class RnsTransportClient implements RnsInterfaceRegistry {
       iface.hardwareMtu,
       iface.edge,
       iface.announceOnly,
+      iface.uplink,
     ]);
   }
 
@@ -330,6 +331,7 @@ class _ExtIface implements RnsInterface {
     required this.hardwareMtu,
     required this.edge,
     required this.announceOnly,
+    this.uplink = false,
     required SendPort toMain,
   }) : _toMain = toMain;
 
@@ -343,6 +345,8 @@ class _ExtIface implements RnsInterface {
   final bool edge;
   @override
   final bool announceOnly;
+  @override
+  final bool uplink;
   final SendPort _toMain;
 
   @override
@@ -420,6 +424,7 @@ Future<void> _engineBody(SendPort toMain) async {
             hardwareMtu: msg[3] as int,
             edge: msg[4] as bool,
             announceOnly: msg[5] as bool,
+            uplink: msg.length > 6 && msg[6] as bool,
             toMain: toMain,
           );
           ifaces[iface.label] = iface;

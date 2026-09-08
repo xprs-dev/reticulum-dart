@@ -23,6 +23,10 @@ class RnsTcpInterface implements RnsInterface {
   final int speedRank;
   @override
   bool get edge => false;
+  // A client of a SHARED hub (see RnsInterface.uplink). The owner says so at
+  // construction; a WiFi-Direct pipe or a hub we run ourselves is not one.
+  @override
+  final bool uplink;
 
   // TCP/HDLC carries arbitrary-size frames, so advertise the link-MTU-discovery
   // ceiling (matches reference RNS TCPInterface.HW_MTU) for big resource parts.
@@ -52,6 +56,7 @@ class RnsTcpInterface implements RnsInterface {
     this.log,
     this.onDisconnect,
     this.speedRank = 2,
+    this.uplink = false,
     String? label,
   }) : label = label ?? '$host:$port';
 
