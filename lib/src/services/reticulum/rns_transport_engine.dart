@@ -59,6 +59,7 @@ class RnsTransportClient implements RnsInterfaceRegistry {
   double _annRate = 0;
   int _verifyShed = 0;
   int _priVerifyShed = 0;
+  int _pathAnswers = 0;
   Uint8List? _transportIdValue;
   bool _edgeBridgeValue = false;
 
@@ -149,6 +150,7 @@ class RnsTransportClient implements RnsInterfaceRegistry {
           _verifyShed = msg[4] as int;
           _priVerifyShed = msg[5] as int;
         }
+        if (msg.length > 6) _pathAnswers = msg[6] as int;
         try {
           onStats?.call();
         } catch (_) {}
@@ -190,6 +192,10 @@ class RnsTransportClient implements RnsInterfaceRegistry {
   /// traffic is being shed and the priority verify budget is too small.
   int get verifyBudgetShed => _verifyShed;
   int get priVerifyBudgetShed => _priVerifyShed;
+
+  /// Path requests answered for OTHER stations — the number that says whether
+  /// being a transport node is doing anybody any good.
+  int get pathAnswersServed => _pathAnswers;
 
   // ── interfaces (external — sockets/radios stay with the owner) ───────────
 
@@ -374,6 +380,7 @@ Future<void> _engineBody(SendPort toMain) async {
       transport.pathCount,
       transport.verifyBudgetShed,
       transport.priVerifyBudgetShed,
+      transport.pathAnswersServed,
     ]);
     final since = lastSweepMs;
     lastSweepMs = DateTime.now().millisecondsSinceEpoch;
