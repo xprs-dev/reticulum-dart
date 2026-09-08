@@ -136,6 +136,19 @@ class RnsIdentity {
       ..setRange(eph.pub.length, eph.pub.length + token.length, token);
   }
 
+  /// An encryptor to this identity that pays the curve ONCE: one ephemeral
+  /// key, one ECDH, one HKDF, then every packet is a fresh IV and AES. For a
+  /// stream of small packets to one peer (a file in chunks) this is the
+  /// difference between seconds and microseconds per packet on a phone doing
+  /// its curve arithmetic in Dart: measured 1.4 to 10 s per encrypt. The wire
+  /// form is unchanged, and a receiver that caches by ephemeral key (see
+  /// [decrypt]) pays once too.
+  Future<RnsEncryptor> encryptor() async {
+    final eph = await RnsCrypto.x25519Generate(null);
+    final shared = await RnsCrypto.x25519Shared(eph.priv, pubBytes);
+    return RnsEncryptor._(eph.pub, RnsCrypto.hkdf(64, shared, salt: hash));
+  }
+
   /// Decrypt a token produced by [encrypt] (no ratchet support yet).
   Future<Uint8List> decrypt(Uint8List ciphertextToken) async {
     if (prvBytes == null) {
@@ -146,9 +159,43 @@ class RnsIdentity {
     }
     final peerPub = Uint8List.sublistView(ciphertextToken, 0, 32);
     final token = Uint8List.sublistView(ciphertextToken, 32);
-    final shared = await RnsCrypto.x25519Shared(prvBytes!, peerPub);
-    final derived = RnsCrypto.hkdf(64, shared, salt: hash);
-    return RnsToken(derived).decrypt(token);
+    // A sender that keeps one ephemeral key for a stream of packets (see
+    // [encryptor]) lets us keep the derived key too: one ECDH per stream.
+    final key = _derivedFor(peerPub) ??
+        _remember(peerPub,
+            RnsCrypto.hkdf(64, await RnsCrypto.x25519Shared(prvBytes!, peerPub),
+                salt: hash));
+    return RnsToken(key).decrypt(token);
+  }
+
+  final Map<String, Uint8List> _derivedCache = {};
+  static const int _derivedCacheMax = 8;
+  Uint8List? _derivedFor(Uint8List peerPub) => _derivedCache[_hexOf(peerPub)];
+  Uint8List _remember(Uint8List peerPub, Uint8List derived) {
+    if (_derivedCache.length >= _derivedCacheMax) {
+      _derivedCache.remove(_derivedCache.keys.first);
+    }
+    _derivedCache[_hexOf(peerPub)] = derived;
+    return derived;
+  }
+
+  static String _hexOf(Uint8List b) =>
+      b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+}
+
+/// See [RnsIdentity.encryptor].
+class RnsEncryptor {
+  RnsEncryptor._(this._ephPub, this._derived);
+  final Uint8List _ephPub;
+  final Uint8List _derived;
+
+  /// eph_pub(32) + token, exactly [RnsIdentity.encrypt]'s wire form, with a
+  /// fresh IV. No curve operation.
+  Uint8List encrypt(Uint8List plaintext) {
+    final token = RnsToken(_derived).encrypt(plaintext);
+    return Uint8List(_ephPub.length + token.length)
+      ..setRange(0, _ephPub.length, _ephPub)
+      ..setRange(_ephPub.length, _ephPub.length + token.length, token);
   }
 }
 

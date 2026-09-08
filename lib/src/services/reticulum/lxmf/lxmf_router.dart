@@ -446,6 +446,15 @@ class LxmfRouter {
       return;
     }
     var src = identityForDest?.call(m.sourceHash);
+    if (acceptUnverified?.call(m) ?? false) {
+      // Self-authenticating at the app layer, so the envelope signature is
+      // neither waited for nor checked — a chunk sender does not even write
+      // one (LxmfMessage.create sign: false). Whether or not we know the
+      // sender.
+      if (src == null) requestPath?.call(m.sourceHash);
+      onMessage?.call(m);
+      return;
+    }
     if (src == null && (acceptUnverified?.call(m) ?? false)) {
       // A payload that authenticates itself at the app layer (a signed XPRS
       // wire) needs no LXMF-layer signature check, so it needs no wait either.

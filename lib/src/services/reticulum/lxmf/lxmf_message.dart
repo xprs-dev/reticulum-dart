@@ -64,6 +64,13 @@ class LxmfMessage {
     String content = '',
     Map<int, Object?>? fields,
     double? timestamp,
+    /// False leaves the signature field zeroed. For a payload that
+    /// authenticates itself (a signed XPRS wire, or a file chunk verified by
+    /// the whole-file hash) the envelope signature buys nothing and costs an
+    /// Ed25519 sign per packet: measured 1.5 to 8 s each on a phone signing in
+    /// Dart. A receiver delivers such a message only under its own
+    /// self-authenticating rule (LxmfRouter.acceptUnverified).
+    bool sign = true,
   }) async {
     final ts = timestamp ?? DateTime.now().millisecondsSinceEpoch / 1000.0;
     final titleB = Uint8List.fromList(utf8.encode(title));
@@ -85,7 +92,8 @@ class LxmfMessage {
     final signedPart = BytesBuilder()
       ..add(hashedPart.toBytes())
       ..add(hash);
-    final sig = await source.sign(signedPart.toBytes());
+    final sig =
+        sign ? await source.sign(signedPart.toBytes()) : Uint8List(64);
 
     final packed = BytesBuilder()
       ..add(destinationHash)
