@@ -20,15 +20,15 @@
 // Native only — SQLite needs dart:ffi. Every call is a no-op on web (kIsWeb).
 
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite3/common.dart';
 
 import 'db_opener.dart';
 
 import 'media_ref.dart';
+import 'file_system.dart';
 
 // Pure-Dart logging shim (this package has no Flutter dependency).
 void debugPrint(Object? message) {
@@ -180,6 +180,22 @@ class MediaFolder {
 class MediaArchive {
   MediaArchive._(this._dbPath);
 
+  /// Fired after bytes land, whichever door they came through: a chat
+  /// download, a packet-lane assembly, a bulk-lane completion, a torrent, a
+  /// user's own attach. Every lane ends in [putBytes] or [putHosted], so this
+  /// is the one place "the file is here now" can be said once. Fires on the
+  /// dedup branch too (the caller learns the file is held either way).
+  /// Arguments: the 43-char base64url sha, the size in bytes, the extension.
+  void Function(String sha256, int size, String ext)? onPut;
+
+  void _notifyPut(String sha256, int size, String ext) {
+    final cb = onPut;
+    if (cb == null) return;
+    try {
+      cb(sha256, size, ext);
+    } catch (_) {}
+  }
+
   /// One archive per data root. Pass the SHARED wapp-data root (the parent of
   /// the per-wapp dirs, e.g. `wappsDataStorage(prefs)`) so every wapp on the
   /// profile sees the same content-addressed store.
@@ -205,17 +221,17 @@ class MediaArchive {
   /// look a row up without duplicating the rules.
   static String? storageKeyOf(String tokenOrSha256) => _keyOf(tokenOrSha256);
 
-  Database? _db;
+  CommonDatabase? _db;
   bool _failed = false; // a fatal open error → operate degraded, never wipe
 
   // ── DB lifecycle ────────────────────────────────────────────────────────
 
-  Database? _ensureDb() {
+  CommonDatabase? _ensureDb() {
     if (_failed) return null;
     final existing = _db;
     if (existing != null) return existing;
     try {
-      final parent = File(_dbPath).parent;
+      final parent = fileSystem.file(_dbPath).parent;
       if (!parent.existsSync()) parent.createSync(recursive: true);
       final db = dbOpener(_dbPath);
       db.execute('PRAGMA journal_mode = WAL;');
@@ -337,7 +353,7 @@ class MediaArchive {
       d == null ? null : (d.length > kMaxDescription ? d.substring(0, kMaxDescription) : d);
 
   /// Rebuild the FTS row for [key] from the current media row.
-  void _syncFts(Database db, String key) {
+  void _syncFts(CommonDatabase db, String key) {
     try {
       db.execute('DELETE FROM media_fts WHERE sha256=?', [key]);
       final rows = db.select(
@@ -428,7 +444,9 @@ class MediaArchive {
       _syncFts(db, key);
     } catch (e2) {
       debugPrint('MediaArchive: putBytes failed: $e2');
+      return token;
     }
+    _notifyPut(key, data.length, e);
     return token;
   }
 
@@ -477,7 +495,9 @@ class MediaArchive {
       _syncFts(db, key);
     } catch (e2) {
       debugPrint('MediaArchive: putHosted failed: $e2');
+      return token;
     }
+    _notifyPut(key, data.length, e);
     return token;
   }
 
