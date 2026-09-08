@@ -89,6 +89,13 @@ class RnsPathEntry {
   Uint8List? nextHop;
   int updatedMs;
 
+  /// The announce PAYLOAD that taught us this path (pubkey + name/random hash +
+  /// signature + app data), kept only while this node is a transport node.
+  /// Answering a path request means re-emitting the ORIGINAL announce, signed by
+  /// the destination itself — a relayer cannot forge one, so it must keep the
+  /// bytes it heard. A leaf keeps none of this (null) and pays nothing.
+  Uint8List? announceData;
+
   RnsPathEntry({
     required this.destHash,
     required this.identity,
@@ -98,6 +105,7 @@ class RnsPathEntry {
     required this.via,
     required this.nextHop,
     required this.updatedMs,
+    this.announceData,
   });
 }
 
@@ -807,6 +815,7 @@ class RnsTransport implements RnsInterfaceRegistry {
       via: via,
       nextHop: nextHop,
       updatedMs: nowMs,
+      announceData: transportId != null ? p.data : existing.announceData,
     );
     // And the identity-level work a fresh announce would have done: pin the
     // fast interface and pull every sibling destination of this peer onto it,
@@ -894,6 +903,15 @@ class RnsTransport implements RnsInterfaceRegistry {
             cb(wanted);
           }
         }
+        // And, as a TRANSPORT node, answer for destinations we merely KNOW.
+        // This is what makes a transport node useful to the stations attached
+        // to it: they ask "who has X", and a node holding a path to X replies
+        // on their behalf, so X becomes reachable to a neighbour that never
+        // heard X's own announce. Reticulum routes on announce-derived hop
+        // memory, not on addresses, so the answer is the ORIGINAL announce
+        // replayed with our transport id: the asker then addresses X through
+        // us, and our _maybeForward carries it the rest of the way.
+        _answerPathRequestForOthers(wanted, viaArg);
         return null;
       }
       remember();
@@ -1084,6 +1102,8 @@ class RnsTransport implements RnsInterfaceRegistry {
         via: via,
         nextHop: nextHop,
         updatedMs: DateTime.now().millisecondsSinceEpoch,
+        // Only a transport node ever replays these, so only it pays the bytes.
+        announceData: transportId != null ? p.data : null,
       );
       // Evict the oldest entries past the cap (insertion order = age).
       while (_paths.length > _maxPaths) {
@@ -1105,6 +1125,59 @@ class RnsTransport implements RnsInterfaceRegistry {
   ///   - HEADER_2 addressed to us (transport_id==ours) -> forward toward the
   ///     destination's path next hop, and (for a LINKREQUEST) remember the link
   ///     so its reverse + data packets route back.
+  /// Per-destination gate on the answers above: a request storm must not turn
+  /// into an answer storm on a slow bearer. Bounded so it cannot grow.
+  final Map<String, int> _pathAnswerAt = {};
+  static const int _pathAnswerGapMs = 5000;
+  static const int _maxPathAnswerGates = 256;
+
+  /// Replay the stored announce for [wanted] to the asker on [via], tagged with
+  /// our transport id (RNS PATH_RESPONSE). No-op for a leaf, for a destination
+  /// we do not hold, for one we only know THROUGH the asker's own interface
+  /// (it would learn nothing and we would loop), or past the hop limit.
+  void _answerPathRequestForOthers(Uint8List wanted, String via) {
+    final myId = transportId;
+    if (myId == null || _passive) return;
+    final e = _paths[_hex(wanted)];
+    if (e == null) return;
+    final data = e.announceData;
+    if (data == null) return;
+    if (e.via == via) return;
+    if (e.hops >= kRnsMaxHops) return;
+    final out = _ifaceByLabel(via);
+    if (out == null) return;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final key = _hex(wanted);
+    final last = _pathAnswerAt[key];
+    if (last != null && nowMs - last < _pathAnswerGapMs) return;
+    if (_pathAnswerAt.length >= _maxPathAnswerGates) {
+      _pathAnswerAt.remove(_pathAnswerAt.keys.first);
+    }
+    _pathAnswerAt[key] = nowMs;
+    // Our stored hops is the RNS convention (wire + 1) = the distance from us,
+    // so we put that on the wire and the asker stores it + 1: itself one hop
+    // further away than we are.
+    out.send(RnsPacket(
+      destHash: e.destHash,
+      data: data,
+      packetType: RnsPacketType.announce,
+      context: RnsContext.pathResponse,
+      headerType: RnsHeaderType.header2,
+      transportType: RnsTransportType.transport,
+      transportId: myId,
+      hops: e.hops,
+    ).pack());
+    log?.call('path answer ${key.substring(0, 8)} -> $via '
+        '(${e.hops} hops via ${e.via})');
+    _pathAnswersServed++;
+  }
+
+  int _pathAnswersServed = 0;
+
+  /// How many path requests we answered for OTHER stations — the number that
+  /// says whether being a transport node is doing anybody any good.
+  int get pathAnswersServed => _pathAnswersServed;
+
   bool _maybeForward(RnsPacket p, String via) {
     final myId = transportId;
     if (myId == null) return false;
