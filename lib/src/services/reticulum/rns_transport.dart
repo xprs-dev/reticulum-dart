@@ -325,6 +325,12 @@ class RnsTransport implements RnsInterfaceRegistry {
 
   int get pathCount => _paths.length;
 
+  /// Frames discarded because they were our own rebroadcast returning to us.
+  /// A non-zero count is normal on a broadcast bearer; it climbing without
+  /// bound means something is reflecting every frame we send.
+  int get selfEchoDropped => _selfEchoDropped;
+  int _selfEchoDropped = 0;
+
   /// Read-only view of every path entry — the transport engine's mirror sweep
   /// iterates this to push recently-updated entries to its client.
   Iterable<RnsPathEntry> get pathsView => _paths.values;
@@ -865,6 +871,24 @@ class RnsTransport implements RnsInterfaceRegistry {
   /// the announce onto the other interfaces. Returns the validated announce or
   /// null.
   Future<RnsAnnounce?> ingest(RnsPacket p, String viaArg) async {
+    // OUR OWN REBROADCAST, COMING BACK. A transport node re-airs announces
+    // tagged with its own transport id; on a broadcast bearer (LAN UDP) that
+    // frame can return to us — reflected by the access point, or arriving from
+    // an address the loopback filter does not recognise as ours. Learning from
+    // it installs a path to somebody else whose NEXT HOP IS US, and every
+    // packet for that destination is then addressed to ourselves and goes
+    // nowhere. Measured on the bench: a phone promoted to a transport node
+    // routed a peer on another network "via lan, 3 hops, next hop = itself",
+    // held 140 messages for relay, and delivered none. A path through
+    // ourselves is never a path.
+    final selfId = transportId;
+    if (selfId != null &&
+        p.headerType == RnsHeaderType.header2 &&
+        p.transportId != null &&
+        _eq(p.transportId!, selfId)) {
+      _selfEchoDropped++;
+      return null;
+    }
     // Dedup by packet hash (RNS uses the same hashable-part scheme).
     final ph = _hex(p.packetHash());
     if (_seenPackets.contains(ph)) {

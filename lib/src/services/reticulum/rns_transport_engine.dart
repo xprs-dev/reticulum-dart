@@ -60,6 +60,7 @@ class RnsTransportClient implements RnsInterfaceRegistry {
   int _verifyShed = 0;
   int _priVerifyShed = 0;
   int _pathAnswers = 0;
+  int _selfEcho = 0;
   Uint8List? _transportIdValue;
   bool _edgeBridgeValue = false;
   bool _edgeQuietValue = false;
@@ -152,6 +153,7 @@ class RnsTransportClient implements RnsInterfaceRegistry {
           _priVerifyShed = msg[5] as int;
         }
         if (msg.length > 6) _pathAnswers = msg[6] as int;
+        if (msg.length > 7) _selfEcho = msg[7] as int;
         try {
           onStats?.call();
         } catch (_) {}
@@ -204,6 +206,9 @@ class RnsTransportClient implements RnsInterfaceRegistry {
   /// Path requests answered for OTHER stations — the number that says whether
   /// being a transport node is doing anybody any good.
   int get pathAnswersServed => _pathAnswers;
+
+  /// Frames dropped because they were our own rebroadcast coming back.
+  int get selfEchoDropped => _selfEcho;
 
   // ── interfaces (external — sockets/radios stay with the owner) ───────────
 
@@ -389,6 +394,7 @@ Future<void> _engineBody(SendPort toMain) async {
       transport.verifyBudgetShed,
       transport.priVerifyBudgetShed,
       transport.pathAnswersServed,
+      transport.selfEchoDropped,
     ]);
     final since = lastSweepMs;
     lastSweepMs = DateTime.now().millisecondsSinceEpoch;
