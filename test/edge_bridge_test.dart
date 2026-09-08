@@ -81,5 +81,39 @@ void main() {
       expect(b.sent.length, 1,
           reason: 'default transport relays onto every other interface');
     });
+
+    test('edgeQuiet (a promoted hub): carried everywhere BUT the edge', () async {
+      final core = _FakeIface('tcp');
+      final core2 = _FakeIface('lan');
+      final edge = _FakeIface('ble', edge: true);
+      final t = RnsTransport(transportId: Uint8List(16))
+        ..edgeQuiet = true
+        ..addInterface(core)
+        ..addInterface(core2)
+        ..addInterface(edge);
+
+      final ann = await _announce();
+      expect(await t.ingest(ann, 'tcp'), isNotNull);
+
+      expect(core2.sent.length, 1,
+          reason: 'a promoted node forwards hub traffic to its other core '
+              'interfaces — that is the whole role');
+      expect(edge.sent.length, 0,
+          reason: 'the announce flood must never reach BLE, promoted or not');
+    });
+
+    test('edgeQuiet still lifts an edge peer onto the core', () async {
+      final core = _FakeIface('tcp');
+      final edge = _FakeIface('ble', edge: true);
+      final t = RnsTransport(transportId: Uint8List(16))
+        ..edgeQuiet = true
+        ..addInterface(core)
+        ..addInterface(edge);
+
+      final ann = await _announce();
+      expect(await t.ingest(ann, 'ble'), isNotNull);
+      expect(core.sent.length, 1);
+      expect(edge.sent.length, 0);
+    });
   });
 }

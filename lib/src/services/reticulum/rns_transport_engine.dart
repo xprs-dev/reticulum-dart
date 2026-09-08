@@ -62,6 +62,7 @@ class RnsTransportClient implements RnsInterfaceRegistry {
   int _pathAnswers = 0;
   Uint8List? _transportIdValue;
   bool _edgeBridgeValue = false;
+  bool _edgeQuietValue = false;
 
   // ── lifecycle ─────────────────────────────────────────────────────────────
 
@@ -169,6 +170,13 @@ class RnsTransportClient implements RnsInterfaceRegistry {
   }
 
   Uint8List? get transportId => _transportIdValue;
+
+  set edgeQuiet(bool v) {
+    _edgeQuietValue = v;
+    _send(['edgeQuiet', v]);
+  }
+
+  bool get edgeQuiet => _edgeQuietValue;
 
   set edgeBridge(bool v) {
     _edgeBridgeValue = v;
@@ -455,6 +463,8 @@ Future<void> _engineBody(SendPort toMain) async {
           transport.setPassive(msg[1] as bool, auto: msg[2] as bool);
         case 'transportId':
           transport.transportId = msg[1] as Uint8List?;
+        case 'edgeQuiet':
+          transport.edgeQuiet = msg[1] as bool;
         case 'edgeBridge':
           transport.edgeBridge = msg[1] as bool;
         case 'priorityNames':

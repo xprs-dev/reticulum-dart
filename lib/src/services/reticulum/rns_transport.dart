@@ -136,6 +136,16 @@ class RnsTransport implements RnsInterfaceRegistry {
   /// (default) rebroadcast behaves like a normal transport node.
   bool edgeBridge = false;
 
+  /// Full transport-node rebroadcast, MINUS the edge bearers: announces heard
+  /// anywhere are carried onto every other non-edge interface (so this node
+  /// forwards for the whole network, not only for its own edge peers), but
+  /// nothing is ever aired onto an edge interface. That last clause is not
+  /// politeness: re-airing a public hub's announce flood onto BLE saturates the
+  /// radio and starves the traffic sharing it. This is what a promoted station
+  /// (mains + fixed link) sets; [edgeBridge] stays the narrower role for a
+  /// battery leaf that merely lifts its BLE peers onto the internet.
+  bool edgeQuiet = false;
+
   final List<RnsInterface> _interfaces = [];
   final Map<String, RnsPathEntry> _paths = {};
 
@@ -1285,7 +1295,11 @@ class RnsTransport implements RnsInterfaceRegistry {
     if (tid == null) return;
     if (pathHops >= kRnsMaxHops) return;
     var others = _interfaces.where((i) => i.label != via);
-    if (edgeBridge) {
+    if (edgeQuiet) {
+      // Carry everything onward, but never onto a bearer that cannot afford
+      // the flood.
+      others = others.where((i) => !i.edge);
+    } else if (edgeBridge) {
       // Only carry announces heard on an edge (e.g. BLE local peers) and only
       // onto core interfaces — never re-air the internet flood onto BLE, and
       // never loop a hub announce across other hub uplinks.
