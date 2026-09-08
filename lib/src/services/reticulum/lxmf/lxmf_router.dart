@@ -279,6 +279,12 @@ class LxmfRouter {
   Future<LxmfDelivery> deliver(
     LxmfMessage message, {
     Duration timeout = const Duration(seconds: 30),
+    /// A retry of something that already failed once says nothing new about
+    /// the route. The retry ladder passes false: a hundred held messages each
+    /// dropping the path on every rung starved every other packet to that
+    /// peer of a route it was using fine (144 datagrams refused for want of
+    /// a path that existed between the drops).
+    bool dropPathOnFailure = true,
   }) async {
     // Hold the message for relay IMMEDIATELY (not only after a ~30s direct-push
     // timeout): a recipient with an unreachable/asymmetric inbound can then PULL
@@ -357,7 +363,7 @@ class LxmfRouter {
           'retrying as broadcast fan-out');
       ok = await attempt(null, const Duration(seconds: 8));
     }
-    if (!ok) {
+    if (!ok && dropPathOnFailure) {
       // The route we were handed does not deliver. Say so: the transport drops
       // it and asks the network again, so the next attempt is not posted into
       // the same hole. A peer in the room answers over the radio we share.
