@@ -1220,8 +1220,7 @@ class RnsTransport implements RnsInterfaceRegistry {
       transportId: myId,
       hops: e.hops,
     ).pack());
-    log?.call('path answer ${key.substring(0, 8)} -> $via '
-        '(${e.hops} hops via ${e.via})');
+    // Counted ([pathAnswersServed]), not logged: a busy hub answers many.
     _pathAnswersServed++;
   }
 

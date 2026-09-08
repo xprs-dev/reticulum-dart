@@ -217,8 +217,9 @@ class LxmfRouter {
         RnsCrypto.constantTimeEquals(p.destHash, deliveryDestHash)) {
       try {
         final plain = await identity.decrypt(p.data);
+        // Counted, not logged: a file arrives as hundreds of these, and a
+        // line per packet is a log ring that only logs itself.
         singlePacketsOpened++;
-        log?.call('lxmf: single packet to us (${p.data.length} B) opened');
         await _deliver(plain);
         return true;
       } catch (e) {
