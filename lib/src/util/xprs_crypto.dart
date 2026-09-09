@@ -387,11 +387,166 @@ class XprsCrypto {
   }
 
   /// PBKDF2-HMAC-SHA256(passphrase, "xprs-xr" ‖ nonce, 100000), first 16 bytes.
+  ///
+  /// THE 100000 IS THE POINT AND IS NOT NEGOTIABLE (section 6.2.1: "the
+  /// derivation is the strength, and it costs everyone the same per message").
+  /// What is negotiable is the work spent inside each of those iterations, and
+  /// a general-purpose HMAC spends twice what it needs to here: PBKDF2 hashes
+  /// with ONE key a hundred thousand times, and a stock HMAC re-compresses
+  /// both 64-byte pad blocks on every single call to re-derive a state that
+  /// cannot have changed. Keeping the two pad midstates makes an iteration two
+  /// SHA-256 compressions instead of four.
+  ///
+  /// Same algorithm, same salt, same iteration count, same bytes out --
+  /// section 6.2.1's worked vector pins the answer to
+  /// `e7d6ef612e71fb09fd65dc71efd832c7` and the test asserts it.
   static Uint8List xrKey(String passphrase, Uint8List nonce) {
     final salt = Uint8List.fromList([...utf8.encode('xprs-xr'), ...nonce]);
-    final kdf = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
-      ..init(Pbkdf2Parameters(salt, 100000, 16));
-    return kdf.process(Uint8List.fromList(utf8.encode(passphrase)));
+    var key = Uint8List.fromList(utf8.encode(passphrase));
+    // RFC 2104: a key longer than the block is hashed first; a shorter one is
+    // zero-padded. Ours is neither, normally, but the rule is the rule.
+    if (key.length > 64) key = _sha256full(key);
+    final ipad = Uint8List(64);
+    final opad = Uint8List(64);
+    for (var i = 0; i < 64; i++) {
+      final k = i < key.length ? key[i] : 0;
+      ipad[i] = k ^ 0x36;
+      opad[i] = k ^ 0x5c;
+    }
+    final w = Uint32List(64); // one scratch schedule for every compression
+    final inner = _shaMidstate(ipad, w);
+    final outer = _shaMidstate(opad, w);
+
+    // dkLen 16 <= 32, so there is exactly one PBKDF2 block and its index is 1.
+    final first = Uint8List(salt.length + 4)
+      ..setRange(0, salt.length, salt)
+      ..[salt.length + 3] = 1;
+    var u = _shaFinish(outer, 64, _shaFinish(inner, 64, first, w), w);
+    final acc = Uint8List.fromList(u);
+    for (var i = 1; i < 100000; i++) {
+      u = _shaFinish(outer, 64, _shaFinish(inner, 64, u, w), w);
+      for (var j = 0; j < 32; j++) {
+        acc[j] ^= u[j];
+      }
+    }
+    return Uint8List.sublistView(acc, 0, 16);
+  }
+
+  // ── SHA-256, with the midstate left in our hands ──────────────────────
+  //
+  // package:crypto and pointycastle both hide the state behind a one-shot
+  // digest, which is why neither can skip the pad blocks above (measured: 405
+  // and 398 ms per derivation on a desktop, indistinguishable). This is the
+  // ordinary algorithm, FIPS 180-4, with two entry points instead of one:
+  // compress a block into a state, and finish a state that has already
+  // absorbed some bytes.
+
+  static const List<int> _shaK = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, //
+    0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+    0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+    0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+    0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+    0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+    0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+  ];
+
+  static const List<int> _shaH0 = [
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, //
+    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+  ];
+
+  /// One 64-byte block of [b] from [off], compressed into [h].
+  static void _shaBlock(Uint32List h, Uint8List b, int off, Uint32List w) {
+    for (var i = 0; i < 16; i++) {
+      final j = off + i * 4;
+      w[i] = (b[j] << 24) | (b[j + 1] << 16) | (b[j + 2] << 8) | b[j + 3];
+    }
+    for (var i = 16; i < 64; i++) {
+      final x = w[i - 15], y = w[i - 2];
+      final s0 = ((x >> 7) | (x << 25)) ^ ((x >> 18) | (x << 14)) ^ (x >> 3);
+      final s1 = ((y >> 17) | (y << 15)) ^ ((y >> 19) | (y << 13)) ^ (y >> 10);
+      w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+    }
+    var a = h[0], b2 = h[1], c = h[2], d = h[3];
+    var e = h[4], f = h[5], g = h[6], hh = h[7];
+    for (var i = 0; i < 64; i++) {
+      final s1 =
+          ((e >> 6) | (e << 26)) ^ ((e >> 11) | (e << 21)) ^ ((e >> 25) | (e << 7));
+      final ch = (e & f) ^ (~e & g);
+      final t1 = (hh + (s1 & 0xffffffff) + (ch & 0xffffffff) + _shaK[i] + w[i]) &
+          0xffffffff;
+      final s0 =
+          ((a >> 2) | (a << 30)) ^ ((a >> 13) | (a << 19)) ^ ((a >> 22) | (a << 10));
+      final maj = (a & b2) ^ (a & c) ^ (b2 & c);
+      final t2 = ((s0 & 0xffffffff) + (maj & 0xffffffff)) & 0xffffffff;
+      hh = g;
+      g = f;
+      f = e;
+      e = (d + t1) & 0xffffffff;
+      d = c;
+      c = b2;
+      b2 = a;
+      a = (t1 + t2) & 0xffffffff;
+    }
+    h[0] = h[0] + a;
+    h[1] = h[1] + b2;
+    h[2] = h[2] + c;
+    h[3] = h[3] + d;
+    h[4] = h[4] + e;
+    h[5] = h[5] + f;
+    h[6] = h[6] + g;
+    h[7] = h[7] + hh;
+  }
+
+  /// The state after absorbing exactly one 64-byte [block] -- an HMAC pad.
+  static Uint32List _shaMidstate(Uint8List block, Uint32List w) {
+    final h = Uint32List.fromList(_shaH0);
+    _shaBlock(h, block, 0, w);
+    return h;
+  }
+
+  /// Finish a digest whose state [mid] has already absorbed [absorbed] bytes,
+  /// over the remaining [msg]. [mid] is never mutated, so one midstate serves
+  /// a hundred thousand iterations.
+  static Uint8List _shaFinish(
+      Uint32List mid, int absorbed, Uint8List msg, Uint32List w) {
+    final h = Uint32List.fromList(mid);
+    final total = absorbed + msg.length;
+    // msg ‖ 0x80 ‖ zeros ‖ 64-bit big-endian bit count, to a block boundary.
+    final tailLen = ((msg.length + 9 + 63) ~/ 64) * 64;
+    final tail = Uint8List(tailLen)..setRange(0, msg.length, msg);
+    tail[msg.length] = 0x80;
+    final bits = total * 8;
+    for (var i = 0; i < 8; i++) {
+      tail[tailLen - 1 - i] = (bits >> (8 * i)) & 0xff;
+    }
+    for (var off = 0; off < tailLen; off += 64) {
+      _shaBlock(h, tail, off, w);
+    }
+    final out = Uint8List(32);
+    for (var i = 0; i < 8; i++) {
+      out[i * 4] = (h[i] >> 24) & 0xff;
+      out[i * 4 + 1] = (h[i] >> 16) & 0xff;
+      out[i * 4 + 2] = (h[i] >> 8) & 0xff;
+      out[i * 4 + 3] = h[i] & 0xff;
+    }
+    return out;
+  }
+
+  /// Plain SHA-256, for the over-long-key rule above.
+  static Uint8List _sha256full(Uint8List msg) {
+    final w = Uint32List(64);
+    final h = Uint32List.fromList(_shaH0);
+    var off = 0;
+    for (; off + 64 <= msg.length; off += 64) {
+      _shaBlock(h, msg, off, w);
+    }
+    return _shaFinish(h, off, Uint8List.sublistView(msg, off), w);
   }
 
   /// AES-128-CTR with a 16-byte IV = nonce(12) ‖ 32-bit big-endian counter

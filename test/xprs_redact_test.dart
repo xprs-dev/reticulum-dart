@@ -1,5 +1,8 @@
+import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:pointycastle/export.dart' as pc;
 import 'package:reticulum/src/util/xprs_crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -7,6 +10,42 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   String hex(Uint8List b) =>
       b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+
+  // `xrKey` carries its own SHA-256 so that PBKDF2 can keep the two HMAC pad
+  // midstates instead of re-deriving them a hundred thousand times (2.75x on
+  // the bench, same bytes). Hand-written crypto earns a differential test: the
+  // key must equal an INDEPENDENT PBKDF2 -- pointycastle's -- for every shape
+  // of passphrase, not just the one vector the spec publishes.
+  group('xrKey agrees with an independent PBKDF2', () {
+    Uint8List reference(String passphrase, Uint8List nonce) {
+      final salt = Uint8List.fromList([...utf8.encode('xprs-xr'), ...nonce]);
+      final kdf = pc.PBKDF2KeyDerivator(pc.HMac(pc.SHA256Digest(), 64))
+        ..init(pc.Pbkdf2Parameters(salt, 100000, 16));
+      return kdf.process(Uint8List.fromList(utf8.encode(passphrase)));
+    }
+
+    final rng = Random(20260909);
+    final nonce =
+        Uint8List.fromList(List.generate(12, (_) => rng.nextInt(256)));
+
+    for (final entry in {
+      'the default': XprsCrypto.kXrDefaultPassphrase,
+      'empty': '',
+      'one byte': 'x',
+      // 64 bytes is the HMAC block: the boundary where padding rules change.
+      'exactly one block': 'a' * 64,
+      'one over the block': 'a' * 65,
+      // Over-long keys are hashed first (RFC 2104), which is the only caller
+      // of the plain-SHA-256 path.
+      'longer than the block': 'a' * 200,
+      'multi-byte characters': 'pässwörd-☂-钥匙',
+    }.entries) {
+      test(entry.key, () {
+        expect(hex(XprsCrypto.xrKey(entry.value, nonce)),
+            hex(reference(entry.value, nonce)));
+      });
+    }
+  });
 
   group('the spec worked vector (§9.2.1)', () {
     // nonce fixed to 000102030405060708090a0b so every value reproduces.
