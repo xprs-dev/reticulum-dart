@@ -18,14 +18,14 @@
  * No Flutter imports, so it runs under `dart run` for tool tests.
  */
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite3/common.dart';
 
 import '../../util/db_opener.dart';
 
 import '../../util/nostr_event.dart';
+import '../../util/file_system.dart';
 
 /// A NIP-01 subscription filter. All present conditions are AND-ed; within a
 /// list condition the members are OR-ed. [tags] keys are single-letter tag
@@ -91,7 +91,7 @@ class NostrFilter {
 class RelayEventStore {
   RelayEventStore._(this._db);
 
-  final Database _db;
+  final CommonDatabase _db;
 
   /// Open (or create) a relay event store at [path]. Use ':memory:' for tests.
   /// Throws if SQLite cannot be opened — callers running on web should not call
@@ -101,7 +101,7 @@ class RelayEventStore {
   /// isolate that cannot reach the host's keyed opener.
   factory RelayEventStore.open(String path, {String? keyHex}) {
     if (path != ':memory:') {
-      final parent = File(path).parent;
+      final parent = fileSystem.file(path).parent;
       if (!parent.existsSync()) parent.createSync(recursive: true);
     }
     final db = dbOpener(path);
@@ -115,7 +115,7 @@ class RelayEventStore {
     return RelayEventStore._(db);
   }
 
-  static void _migrate(Database db) {
+  static void _migrate(CommonDatabase db) {
     // Canonical events. `raw` holds the verbatim NIP-01 JSON so we can return
     // byte-faithful events; the columns are the query surface.
     db.execute('''

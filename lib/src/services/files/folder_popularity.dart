@@ -18,7 +18,7 @@
  * Path-injectable (':memory:' for tests). Synchronous; headless. Time is passed
  * in (`nowMs`) so it is testable and never reaches for a wall clock itself.
  */
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite3/common.dart';
 
 import '../../util/db_opener.dart';
 
@@ -33,7 +33,7 @@ class PopMonth {
 }
 
 class FolderPopularity {
-  final Database _db;
+  final CommonDatabase _db;
   FolderPopularity._(this._db);
 
   factory FolderPopularity.open(String path) {

@@ -10,21 +10,21 @@
  * This is the wallet's storage layer only; minting/redeeming/settlement live in
  * the mint and ATM layers. coin_ec/bearer_token + sqlite3 + dart:io.
  */
-import 'dart:io';
+import 'package:file/file.dart';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite3/common.dart';
 
 import '../../util/db_opener.dart';
 
 import 'bearer_token.dart';
 import 'coin_keyset.dart';
+import '../../util/file_system.dart';
 
 class CoinWallet {
   CoinWallet._(this._dbPath);
 
   final String _dbPath; // ':memory:' = no disk
-  Database? _db;
+  CommonDatabase? _db;
   bool _failed = false;
 
   /// Open (creating the schema). Use ':memory:' for tests.
@@ -34,16 +34,16 @@ class CoinWallet {
     return w;
   }
 
-  Database? _ensureDb() {
-    if (kIsWeb || _failed) return null;
+  CommonDatabase? _ensureDb() {
+    if (_failed) return null;
     final existing = _db;
     if (existing != null) return existing;
     try {
-      final Database db;
+      final CommonDatabase db;
       if (_dbPath == ':memory:') {
-        db = sqlite3.openInMemory();
+        db = dbMemoryOpener();
       } else {
-        final parent = File(_dbPath).parent;
+        final parent = fileSystem.file(_dbPath).parent;
         if (!parent.existsSync()) parent.createSync(recursive: true);
         db = dbOpener(_dbPath);
         db.execute('PRAGMA journal_mode = WAL;');

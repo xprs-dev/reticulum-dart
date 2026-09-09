@@ -10,7 +10,7 @@
  * re-scan is incremental and the host has a content-addressable view of disk
  * files without re-hashing everything each launch.
  */
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite3/common.dart';
 
 import '../../util/db_opener.dart';
 
@@ -26,7 +26,7 @@ class DiskIndexEntry {
 }
 
 class DiskIndex {
-  final Database _db;
+  final CommonDatabase _db;
   DiskIndex._(this._db);
 
   static DiskIndex open(String path) {

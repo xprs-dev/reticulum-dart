@@ -16,10 +16,10 @@
  */
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi';
 import 'dart:isolate';
 
-import 'package:sqlite3/open.dart' as sqlite_open;
+import 'sqlite_library_override_stub.dart'
+    if (dart.library.io) 'sqlite_library_override_io.dart';
 
 import '../../util/nostr_crypto.dart';
 import '../../util/nostr_event.dart';
@@ -564,13 +564,7 @@ class NostrClient {
     runZonedGuarded(() {
       // The sqlite3 loader override is per-isolate: re-apply the host's choice
       // of native library here, BEFORE anything opens a database.
-      final lib = init.sqliteLibrary;
-      if (lib != null && lib.isNotEmpty) {
-        DynamicLibrary open() => DynamicLibrary.open(lib);
-        for (final os in sqlite_open.OperatingSystem.values) {
-          sqlite_open.open.overrideFor(os, open);
-        }
-      }
+      applySqliteLibraryOverride(init.sqliteLibrary);
       // All store/relay setup runs on THIS (background) isolate.
       final engine = _Engine(
         init.toMain,

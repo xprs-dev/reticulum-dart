@@ -15,10 +15,11 @@
  * bytes plus a tiny `<sha>.part.meta` JSON sidecar.
  */
 import 'dart:convert';
-import 'dart:io';
+import 'package:file/file.dart';
 import 'dart:typed_data';
 
 import '../reticulum/rns_resource.dart' show kMaxEfficientSize;
+import '../../util/file_system.dart';
 
 /// A resumable partial: the already-held, segment-aligned prefix of a file.
 class ResumeState {
@@ -73,8 +74,8 @@ class FilePartialStore implements PartialStore {
 
   String _hex(Uint8List b) =>
       b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
-  File _part(String sha) => File('${dir.path}/$sha.part');
-  File _meta(String sha) => File('${dir.path}/$sha.part.meta');
+  File _part(String sha) => fileSystem.file('${dir.path}/$sha.part');
+  File _meta(String sha) => fileSystem.file('${dir.path}/$sha.part.meta');
 
   Future<void> _ensureDir() async {
     if (!await dir.exists()) await dir.create(recursive: true);
@@ -154,7 +155,7 @@ class FilePartialStore implements PartialStore {
       {required int total,
       required int segmentsComplete,
       required String ext}) async {
-    final tmp = File('${dir.path}/$sha.part.meta.tmp');
+    final tmp = fileSystem.file('${dir.path}/$sha.part.meta.tmp');
     await tmp.writeAsString(jsonEncode({
       'total': total,
       'segmentsComplete': segmentsComplete,
@@ -167,7 +168,7 @@ class FilePartialStore implements PartialStore {
   @override
   Future<void> delete(Uint8List fileHash) async {
     final sha = _hex(fileHash);
-    for (final f in [_part(sha), _meta(sha), File('${dir.path}/$sha.part.meta.tmp')]) {
+    for (final f in [_part(sha), _meta(sha), fileSystem.file('${dir.path}/$sha.part.meta.tmp')]) {
       try {
         if (await f.exists()) await f.delete();
       } catch (_) {}
@@ -215,7 +216,7 @@ class FilePartialStore implements PartialStore {
   }
 
   Future<void> _deleteByHex(String sha) async {
-    for (final f in [_part(sha), _meta(sha), File('${dir.path}/$sha.part.meta.tmp')]) {
+    for (final f in [_part(sha), _meta(sha), fileSystem.file('${dir.path}/$sha.part.meta.tmp')]) {
       try {
         if (await f.exists()) await f.delete();
       } catch (_) {}

@@ -22,6 +22,7 @@ dependencies:
   bech32: ^0.2.2            # npub / nsec encoding
   hex: ^0.2.0               # hex <-> bytes
   sqlite3: ^2.4.0           # event store / media archive
+  file: ^7.0.0              # injectable filesystem (lib/src/util/file_system.dart): disk natively, the host's tree on web
   web_socket_channel: ^2.4.0 # wss:// NOSTR relays (native + web)
   archive: ^3.6.1           # BLE parcel (de)compression
   bluetooth_low_energy: ^6.0.0   # BLE central + peripheral (GATT)

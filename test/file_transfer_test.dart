@@ -182,7 +182,7 @@ void main() {
     test('resumes from a pre-seeded partial (serves only the tail)', () async {
       final file = _bytes(M * 2 + 40000, seed: 4242); // 3 segments, last short
       final hash = _sha(file);
-      final store = FilePartialStore(tmp);
+      final store = FilePartialStore(fileSystem.directory(tmp.path));
       await seed(store, hash, file, 2, file.length); // first 2 segments held
 
       final (fetcher, provPub) = await pairResumable(MemoryFileSource()..add(file), store);
@@ -200,7 +200,7 @@ void main() {
     test('resume across an exact segment boundary (no short tail)', () async {
       final file = _bytes(M * 4, seed: 7); // exactly 4 full segments
       final hash = _sha(file);
-      final store = FilePartialStore(tmp);
+      final store = FilePartialStore(fileSystem.directory(tmp.path));
       await seed(store, hash, file, 2, file.length);
       final (fetcher, provPub) = await pairResumable(MemoryFileSource()..add(file), store);
       final got =
@@ -212,7 +212,7 @@ void main() {
     test('d-guard: a wrong total triggers fallback to a full fetch', () async {
       final file = _bytes(M * 4 + 1000, seed: 11); // 5 segments
       final hash = _sha(file);
-      final store = FilePartialStore(tmp);
+      final store = FilePartialStore(fileSystem.directory(tmp.path));
       // Valid prefix bytes, but claim a wrong total -> the first resumed
       // advertisement's d != stored total -> resume rejected -> restart full.
       await seed(store, hash, file, 2, file.length + 999999);
@@ -227,7 +227,7 @@ void main() {
       final file = _bytes(M * 3 + 5000, seed: 21); // 4 segments
       final other = _bytes(M * 3 + 5000, seed: 22); // SAME length, different bytes
       final hash = _sha(file);
-      final store = FilePartialStore(tmp);
+      final store = FilePartialStore(fileSystem.directory(tmp.path));
       // Seed a wrong prefix at the SAME total: d-guard passes, segments serve the
       // real tail, but assembled (wrong prefix + real tail) fails the final sha
       // -> partial discarded -> full re-fetch yields the real file.
@@ -242,7 +242,7 @@ void main() {
     test('sub-1MB file leaves no partial (nothing to resume)', () async {
       final file = _bytes(300 * 1024, seed: 5);
       final hash = _sha(file);
-      final store = FilePartialStore(tmp);
+      final store = FilePartialStore(fileSystem.directory(tmp.path));
       final (fetcher, provPub) = await pairResumable(MemoryFileSource()..add(file), store);
       final got = await fetcher.fetch(hash, provPub);
       expect(got, isNotNull);
@@ -251,7 +251,7 @@ void main() {
     });
 
     test('FilePartialStore: append, load, self-heal torn tail, delete', () async {
-      final store = FilePartialStore(tmp);
+      final store = FilePartialStore(fileSystem.directory(tmp.path));
       final file = _bytes(M * 3, seed: 33);
       final hash = _sha(file);
       await store.appendSegment(hash, 0, Uint8List.sublistView(file, 0, M),
@@ -279,7 +279,7 @@ void main() {
     });
 
     test('FilePartialStore.gc reclaims by age', () async {
-      final store = FilePartialStore(tmp);
+      final store = FilePartialStore(fileSystem.directory(tmp.path));
       final h = _sha(_bytes(10, seed: 1));
       final file = _bytes(M, seed: 2);
       await store.appendSegment(h, 0, file, total: M * 2);

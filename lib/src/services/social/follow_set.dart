@@ -9,9 +9,10 @@
  * retention tier (see retention_tier.dart). Persisted as a small JSON array.
  */
 import 'dart:convert';
-import 'dart:io';
+import 'package:file/file.dart';
 
 import '../../util/nostr_crypto.dart';
+import '../../util/file_system.dart';
 
 class FollowSet {
   final Set<String> _hex = {};
@@ -91,7 +92,7 @@ class FollowSet {
   void load(String path) {
     _path = path;
     try {
-      final f = File(path);
+      final f = fileSystem.file(path);
       if (!f.existsSync()) return;
       final data = jsonDecode(f.readAsStringSync());
       if (data is List) {
@@ -109,7 +110,7 @@ class FollowSet {
     final p = _path;
     if (p == null) return;
     try {
-      File(p).writeAsStringSync(jsonEncode(_hex.toList()));
+      fileSystem.file(p).writeAsStringSync(jsonEncode(_hex.toList()));
     } catch (_) {
       // best effort
     }

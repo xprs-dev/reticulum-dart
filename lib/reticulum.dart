@@ -36,6 +36,7 @@ export 'src/util/nostr_nip19.dart';
 export 'src/util/media_ref.dart';
 export 'src/util/media_archive.dart';
 export 'src/util/db_opener.dart';
+export 'src/util/file_system.dart';
 
 // ── Social relay (distributed user protocol) ────────────────────────────
 export 'src/services/social/feed_quality.dart';

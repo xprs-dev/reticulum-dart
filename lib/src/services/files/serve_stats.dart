@@ -9,7 +9,7 @@
  *
  * Path-injectable (':memory:' for tests). Synchronous; headless.
  */
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite3/common.dart';
 
 import '../../util/db_opener.dart';
 
@@ -32,7 +32,7 @@ class FolderServeStats {
 }
 
 class ServeStats {
-  final Database _db;
+  final CommonDatabase _db;
   ServeStats._(this._db);
 
   static const int _msPerDay = 86400000;

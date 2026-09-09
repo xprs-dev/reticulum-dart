@@ -13,7 +13,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide File, Directory, FileSystemEntity, Link;
 import 'dart:math' show max;
 
 import '../../util/nostr_event.dart';
@@ -24,6 +24,7 @@ import 'nostr_relay_client.dart';
 import 'nostr_wire.dart';
 import 'nostr_ws_client.dart';
 import 'relay_event_store.dart';
+import '../../util/file_system.dart';
 
 /// How often we go BACK to the relays for new posts.
 ///
@@ -193,7 +194,7 @@ class NostrRelayHub {
     final p = persistPath;
     if (p == null) return const [];
     try {
-      final f = File(p);
+      final f = fileSystem.file(p);
       if (!f.existsSync()) return const [];
       final j = jsonDecode(f.readAsStringSync());
       // Two shapes: the original bare list, and the current object that also
@@ -230,7 +231,7 @@ class NostrRelayHub {
     final p = persistPath;
     if (p == null) return;
     try {
-      File(p).writeAsStringSync(
+      fileSystem.file(p).writeAsStringSync(
         jsonEncode({
           'relays': [for (final e in _endpoints.values) e.toJson()],
           'offered': _offered.toList(),
