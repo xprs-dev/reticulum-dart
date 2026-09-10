@@ -1,6 +1,6 @@
 /*
- * Copyright (c) XPRS
- * License: Apache-2.0
+ * Copyright (c) Max Brito and XPRS contributors
+ * License: BSD-3-Clause
  *
  * NOSTR Event Implementation (NIP-01)
  * https://github.com/nostr-protocol/nips/blob/master/01.md

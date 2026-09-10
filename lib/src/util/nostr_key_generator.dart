@@ -1,6 +1,6 @@
 /*
- * Copyright (c) XPRS
- * License: Apache-2.0
+ * Copyright (c) Max Brito and XPRS contributors
+ * License: BSD-3-Clause
  *
  * NOSTR Key Generator - Uses proper secp256k1 cryptography
  *

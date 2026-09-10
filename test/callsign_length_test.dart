@@ -1,6 +1,6 @@
 /*
- * Copyright (c) XPRS
- * License: Apache-2.0
+ * Copyright (c) Max Brito and XPRS contributors
+ * License: BSD-3-Clause
  *
  * Variable-length callsigns, spec section 3.
  *

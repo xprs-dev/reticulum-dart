@@ -1,6 +1,6 @@
 /*
- * Copyright (c) XPRS
- * License: Apache-2.0
+ * Copyright (c) Max Brito and XPRS contributors
+ * License: BSD-3-Clause
  *
  * NIP-19 decoder for nostr: URIs (note/npub/nevent/nprofile/naddr).
  *

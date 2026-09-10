@@ -1,6 +1,6 @@
 /*
- * Copyright (c) XPRS
- * License: Apache-2.0
+ * Copyright (c) Max Brito and XPRS contributors
+ * License: BSD-3-Clause
  *
  * NOSTR Cryptography Implementation
  * Implements NIP-01 compatible signing using BIP-340 Schnorr signatures

@@ -131,4 +131,4 @@ here.
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+BSD-3-Clause, copyright Max Brito and XPRS contributors. See [LICENSE](LICENSE).
