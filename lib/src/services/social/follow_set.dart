@@ -9,7 +9,6 @@
  * retention tier (see retention_tier.dart). Persisted as a small JSON array.
  */
 import 'dart:convert';
-import 'package:file/file.dart';
 
 import '../../util/nostr_crypto.dart';
 import '../../util/file_system.dart';

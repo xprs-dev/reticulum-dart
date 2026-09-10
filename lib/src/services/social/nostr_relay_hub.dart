@@ -13,7 +13,6 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:io' hide File, Directory, FileSystemEntity, Link;
 import 'dart:math' show max;
 
 import '../../util/nostr_event.dart';

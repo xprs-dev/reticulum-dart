@@ -78,8 +78,8 @@ void main() {
 
     // ignore: avoid_print
     print('xr derivation (100k iterations, one 16-byte block):\n'
-        '  shipped XprsCrypto.xrKey : ${shipped} ms\n'
-        '  pointycastle PBKDF2      : ${pcMs} ms\n'
-        '  package:crypto HMAC loop : ${cryptoMs} ms');
+        '  shipped XprsCrypto.xrKey : $shipped ms\n'
+        '  pointycastle PBKDF2      : $pcMs ms\n'
+        '  package:crypto HMAC loop : $cryptoMs ms');
   }, timeout: const Timeout(Duration(minutes: 5)));
 }

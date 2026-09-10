@@ -19,6 +19,9 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reticulum/reticulum.dart';
 
+/// The relaying hub's transport id — anything but our own.
+final Uint8List _hubId = Uint8List.fromList(List<int>.filled(16, 0xA7));
+
 class _Iface extends RnsInterface {
   _Iface(this._label, this._rank);
   final String _label;
@@ -53,7 +56,11 @@ RnsPacket _transported(RnsPacket p) => RnsPacket(
       destHash: p.destHash,
       context: p.context,
       data: p.data,
-      transportId: Uint8List(16),
+      // The HUB's id, and deliberately not ours: a header-2 frame carrying
+      // our own transport id is our rebroadcast coming back, and the
+      // transport drops it rather than learn a path whose next hop is
+      // itself. A relaying node is somebody else.
+      transportId: _hubId,
       hops: p.hops + 1,
       destType: p.destType,
     );

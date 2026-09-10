@@ -22,6 +22,11 @@ class _FakeIface implements RnsInterface {
   bool get edge => false;
   @override
   bool get announceOnly => false;
+  /// `implements` inherits no defaults, so every member the interface grows
+  /// has to be spelled out here. This one was added to RnsInterface and not
+  /// here, and `flutter analyze` has failed on the whole package since.
+  @override
+  bool get uplink => false;
   @override
   void send(Uint8List raw) => sent.add(raw);
 }

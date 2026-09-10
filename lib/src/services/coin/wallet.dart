@@ -10,7 +10,6 @@
  * This is the wallet's storage layer only; minting/redeeming/settlement live in
  * the mint and ATM layers. coin_ec/bearer_token + sqlite3 + dart:io.
  */
-import 'package:file/file.dart';
 
 import 'package:sqlite3/common.dart';
 
