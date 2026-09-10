@@ -66,6 +66,33 @@ void main() {
       expect(ring.contains(relayedAnnounce), isFalse);
     });
 
+    test('the digest fits the web, where an int is a double', () {
+      // The 64-bit FNV constants this used to carry (0xcbf29ce484222325) are
+      // not representable in JavaScript, and dart2js refused the file: the
+      // whole web build failed on them. Both lanes must therefore stay inside
+      // 32 bits, on every platform, or the browser and the VM would disagree
+      // about which frame is our own echo.
+      final (hi, lo) = LanSentRing.digest(Uint8List.fromList([1, 2, 3, 250]));
+      for (final v in [hi, lo]) {
+        expect(v, greaterThanOrEqualTo(0));
+        expect(v, lessThanOrEqualTo(0xFFFFFFFF));
+      }
+      expect(hi, isNot(lo), reason: 'two lanes, or it is 32 bits twice');
+    });
+
+    test('the digest depends on every byte and on their order', () {
+      Uint8List b(List<int> v) => Uint8List.fromList(v);
+      expect(LanSentRing.digest(b([1, 2, 3])),
+          isNot(LanSentRing.digest(b([1, 2, 4]))));
+      expect(LanSentRing.digest(b([1, 2, 3])),
+          isNot(LanSentRing.digest(b([3, 2, 1]))));
+      expect(LanSentRing.digest(b([1, 2, 3])),
+          isNot(LanSentRing.digest(b([1, 2, 3, 0]))),
+          reason: 'a trailing zero is a different frame');
+      expect(LanSentRing.digest(b([1, 2, 3])), LanSentRing.digest(b([1, 2, 3])),
+          reason: 'and the same bytes are the same frame');
+    });
+
     test('the ring is bounded and forgets the oldest', () {
       final ring = LanSentRing(size: 2);
       final a = Uint8List.fromList([1, 2, 3]);

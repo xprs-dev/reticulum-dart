@@ -62,32 +62,65 @@ enum LanTx {
 /// back is recognised whatever address it comes from. FNV-1a over the bytes:
 /// two frames we sent that collide in 64 bits within the ring's lifetime is
 /// not a case worth a byte of state.
+///
+/// The 64 bits are kept as two 32-bit lanes rather than one 64-bit integer,
+/// because this library compiles for the web too, where an `int` IS a double:
+/// `0xcbf29ce484222325` cannot be represented there and dart2js refused the
+/// file outright — the whole web build had been failing on these two literals.
+/// Two lanes also keep one arithmetic for both platforms: everything below is
+/// masked to 32 bits, so the VM and the browser agree digest for digest.
 class LanSentRing {
-  LanSentRing({this.size = 128}) : _ring = List<int>.filled(size, 0);
+  LanSentRing({this.size = 128})
+      : _hi = List<int>.filled(size, 0),
+        _lo = List<int>.filled(size, 0);
   final int size;
-  final List<int> _ring;
+  final List<int> _hi;
+  final List<int> _lo;
   int _next = 0;
   int _count = 0;
 
-  static int digest(Uint8List raw) {
-    var h = 0xcbf29ce484222325;
+  /// FNV-1a offset bases. Two different ones give two lanes that do not move
+  /// together, which is what makes the pair worth 64 bits.
+  static const int _basisHi = 0x811c9dc5;
+  static const int _basisLo = 0x1000193;
+
+  /// One 32-bit FNV-1a lane.
+  ///
+  /// The multiply by the prime is written as the prime's own bits
+  /// (2^24 + 2^8 + 2^7 + 2^4 + 2^1 + 1) with every partial masked, because
+  /// `h * 0x01000193` overflows a double's 53 bits of exactness on the web
+  /// and would silently give a different digest there.
+  static int lane(Uint8List raw, int basis) {
+    var h = basis;
     for (final b in raw) {
-      h ^= b;
-      h = (h * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF;
+      h = (h ^ b) & 0xFFFFFFFF;
+      var acc = h;
+      acc = (acc + ((h << 1) & 0xFFFFFFFF)) & 0xFFFFFFFF;
+      acc = (acc + ((h << 4) & 0xFFFFFFFF)) & 0xFFFFFFFF;
+      acc = (acc + ((h << 7) & 0xFFFFFFFF)) & 0xFFFFFFFF;
+      acc = (acc + ((h << 8) & 0xFFFFFFFF)) & 0xFFFFFFFF;
+      acc = (acc + ((h << 24) & 0xFFFFFFFF)) & 0xFFFFFFFF;
+      h = acc;
     }
     return h;
   }
 
+  /// The 64-bit digest as its two halves.
+  static (int, int) digest(Uint8List raw) =>
+      (lane(raw, _basisHi), lane(raw, _basisLo));
+
   void remember(Uint8List raw) {
-    _ring[_next] = digest(raw);
+    final (hi, lo) = digest(raw);
+    _hi[_next] = hi;
+    _lo[_next] = lo;
     _next = (_next + 1) % size;
     if (_count < size) _count++;
   }
 
   bool contains(Uint8List raw) {
-    final d = digest(raw);
+    final (hi, lo) = digest(raw);
     for (var i = 0; i < _count; i++) {
-      if (_ring[i] == d) return true;
+      if (_hi[i] == hi && _lo[i] == lo) return true;
     }
     return false;
   }
