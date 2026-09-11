@@ -201,6 +201,26 @@ class XprsCrypto {
   static Uint8List? ecdhShared(BigInt d, Uint8List pubXonly) =>
       _ecdhKey(d, pubXonly);
 
+  /// Put a secret computed elsewhere into THIS isolate's cache.
+  ///
+  /// The multiplication is pure Dart and takes seconds on a slow phone, so a
+  /// caller that knows it will soon seal to [pubXonly] (a station asking to be
+  /// claimed, XPRS.md 11.10) computes [ecdhShared] on a worker isolate and
+  /// hands the 32 bytes back here; the seal on the UI isolate is then AES only.
+  static void primeShared(BigInt d, Uint8List pubXonly, Uint8List key) {
+    if (key.length != 32) return;
+    final ck = '${_scalarTag(d)}:${_hexOf(pubXonly)}';
+    _ecdhCache.remove(ck);
+    _ecdhCache[ck] = Uint8List.fromList(key);
+    while (_ecdhCache.length > _ecdhCacheMax) {
+      _ecdhCache.remove(_ecdhCache.keys.first);
+    }
+  }
+
+  /// Whether [pubXonly]'s secret is already cached for [d] (no work done).
+  static bool hasShared(BigInt d, Uint8List pubXonly) =>
+      _ecdhCache.containsKey('${_scalarTag(d)}:${_hexOf(pubXonly)}');
+
   static Uint8List? _ecdhKey(BigInt d, Uint8List pubXonly) {
     // Discriminate our scalar by a DIGEST, never by hashCode: a hashCode
     // collision between two different private keys would silently cross-wire
