@@ -268,8 +268,8 @@ class NostrCrypto {
 
   /// Whether [callsign] could have been derived from [publicKeyHex].
   ///
-  /// Strips the device suffix first, then the `X1`/`X3`/`X4`/`X5` prefix, and
-  /// checks the remainder against the key's bech32 encoding at that length.
+  /// Strips the device suffix first, then the `X1` to `X5` prefix, and checks
+  /// the remainder against the key's bech32 encoding at that length.
   ///
   /// **This answers "could this key produce this label", not "is this the
   /// holder's callsign".** Given only a callsign and a key there is no way to
@@ -282,8 +282,11 @@ class NostrCrypto {
   /// this function, is what stops one person from wearing four names.
   ///
   /// Returns false for a callsign that is not self-derived -- a licensed
-  /// `CT1ABC-9` or `G0XYZ/P` carries no `X1/X3/X4/X5` prefix and is bound to a
-  /// key by other means (spec section 9.4.2), so this test does not apply.
+  /// `CT1ABC-9` or `G0XYZ/P` carries no `X1` to `X5` prefix and is bound to a
+  /// key by other means (spec section 6.4.2), so this test does not apply.
+  /// That is not the observer refusing to name such a station: the app keeps
+  /// the binding a verified `t:identity` gave it and believes the announced
+  /// callsign on that proof instead (spec section 3.0.1).
   static bool callsignMatchesKey(String callsign, String publicKeyHex) {
     final bare = bareCallsign(callsign);
     if (bare.length < 2) return false;

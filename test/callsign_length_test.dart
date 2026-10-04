@@ -145,8 +145,10 @@ void main() {
       }
     });
 
-    test('accepts every self-derived prefix, X1 X3 X4 X5', () {
-      for (final p in ['X1', 'X3', 'X4', 'X5']) {
+    test('accepts every self-derived prefix, X1 X2 X3 X4 X5', () {
+      // X2 was missing from this list AND from the whitelist, so a movable
+      // station's callsign (deriveMobileCallsign mints them) never verified.
+      for (final p in ['X1', 'X2', 'X3', 'X4', 'X5']) {
         expect(NostrCrypto.callsignMatchesKey('$p${body.substring(0, 4)}', hex),
             isTrue,
             reason: p);
@@ -154,13 +156,16 @@ void main() {
     });
 
     test('does not apply to a licensed callsign', () {
-      // No X1/X3/X4/X5 prefix: bound to a key by section 9.4.2, not derived.
+      // No X1 to X5 prefix: bound to a key by section 6.4.2, not derived.
       expect(NostrCrypto.callsignMatchesKey('CT1ABC-9', hex), isFalse);
       expect(NostrCrypto.callsignMatchesKey('G0XYZ', hex), isFalse);
     });
 
     test('rejects malformed input rather than throwing', () {
-      for (final c in ['', 'X', 'X1', 'X1A', 'X1ABCDEF', '----', 'X2ABCD']) {
+      // 'X2ABCD' used to be in this list, and passed for the wrong reason:
+      // the literal body ABCD does not match this key, not because X2 was
+      // refused. X6ABCD is the honest case, a prefix that does not exist.
+      for (final c in ['', 'X', 'X1', 'X1A', 'X1ABCDEF', '----', 'X6ABCD']) {
         expect(NostrCrypto.callsignMatchesKey(c, hex), isFalse, reason: '"$c"');
       }
       expect(NostrCrypto.callsignMatchesKey('X1ABCD', 'not-a-key'), isFalse);
