@@ -339,6 +339,12 @@ class RnsTransport implements RnsInterfaceRegistry {
   int get selfEchoDropped => _selfEchoDropped;
   int _selfEchoDropped = 0;
 
+  /// Announce copies re-aired onto other interfaces, one per interface. A
+  /// counter, not a log line each: on a station between a busy hub and a LAN
+  /// it was hundreds of lines a minute and most of the app's log ring.
+  int get announcesRebroadcast => _announcesRebroadcast;
+  int _announcesRebroadcast = 0;
+
   /// Read-only view of every path entry — the transport engine's mirror sweep
   /// iterates this to push recently-updated entries to its client.
   Iterable<RnsPathEntry> get pathsView => _paths.values;
@@ -1375,8 +1381,7 @@ class RnsTransport implements RnsInterfaceRegistry {
     final raw = relay.pack();
     for (final iface in targets) {
       iface.send(raw);
-      log?.call(
-          'rebroadcast ${_hex(ann.destHash)} -> ${iface.label} hops=$pathHops');
+      _announcesRebroadcast++;
     }
   }
 
