@@ -137,6 +137,66 @@ class XprsCrypto {
     return Uint8List.fromList([...ec, ..._toBytes(s, 32)]);
   }
 
+  /// The standard BIP-340 signature (64 bytes) over a 32-byte message [m] with
+  /// private scalar [d]: the form XPRS.md 6.1.3 uses for a packet whose key is
+  /// held by a NOSTR signer. This implementation exists to produce and check
+  /// the worked example, and for a station that signs on behalf of a
+  /// signer-less test; a real signer is the extension. [aux] is BIP-340's
+  /// auxiliary randomness (32 bytes; fresh unless a test fixes it).
+  static Uint8List bip340Sign(Uint8List m, BigInt d, {Uint8List? aux}) {
+    final n = _curve.n;
+    final g = _curve.G;
+    var dp = d;
+    var pPoint = (g * d)!;
+    if (pPoint.y!.toBigInteger()!.isOdd) {
+      dp = n - d;
+      pPoint = (g * dp)!;
+    }
+    final px = _toBytes(pPoint.x!.toBigInteger()!, 32);
+    final a = aux ?? Uint8List.fromList([for (var i = 0; i < 32; i++) _rng.nextInt(256)]);
+    final t = _toBytes(dp ^ _toBig(_taggedHash('BIP0340/aux', a)), 32);
+    var k = _toBig(_taggedHash('BIP0340/nonce', [...t, ...px, ...m])) % n;
+    if (k == BigInt.zero) throw StateError('zero nonce');
+    var r = (g * k)!;
+    if (r.y!.toBigInteger()!.isOdd) {
+      k = n - k;
+      r = (g * k)!;
+    }
+    final rx = _toBytes(r.x!.toBigInteger()!, 32);
+    final e = _toBig(_taggedHash('BIP0340/challenge', [...rx, ...px, ...m])) % n;
+    return Uint8List.fromList([...rx, ..._toBytes((k + e * dp) % n, 32)]);
+  }
+
+  /// Verify a standard BIP-340 [sig] (64 bytes) on the 32-byte [m] for x-only
+  /// [pubXonly] (XPRS.md 6.1.3).
+  static bool bip340Verify(Uint8List m, Uint8List sig, Uint8List pubXonly) {
+    try {
+      if (sig.length != 64 || pubXonly.length != 32 || m.length != 32) {
+        return false;
+      }
+      final n = _curve.n;
+      final g = _curve.G;
+      final r = _toBig(sig.sublist(0, 32));
+      final s = _toBig(sig.sublist(32, 64));
+      if (r >= _p || s >= n) return false;
+      final pPoint = _liftX(_toBig(pubXonly));
+      if (pPoint == null) return false;
+      final e = _toBig(_taggedHash(
+              'BIP0340/challenge', [...sig.sublist(0, 32), ...pubXonly, ...m])) %
+          n;
+      final sg = (g * s)!;
+      final ep = (pPoint * e)!;
+      final negEp = _curve.curve
+          .createPoint(ep.x!.toBigInteger()!, _p - ep.y!.toBigInteger()!);
+      final rPoint = sg + negEp;
+      if (rPoint == null || rPoint.isInfinity) return false;
+      if (rPoint.y!.toBigInteger()!.isOdd) return false;
+      return rPoint.x!.toBigInteger()! == r;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Verify a 48-byte signature [sig] on digest [m] for x-only pubkey [pubXonly].
   static bool verify(Uint8List m, Uint8List sig, Uint8List pubXonly) {
     try {
