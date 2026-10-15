@@ -837,10 +837,19 @@ class RnsTransport implements RnsInterfaceRegistry {
     // fast the relay's medium: the relay may have no way to reach that peer at
     // all (a Bluetooth-only phone, bridged onto the hubs by us).
     if (!direct && existingDirect) return true;
-    if (!(direct && !existingDirect) &&
-        _speedRank(via) <= _speedRank(existing.via)) {
-      return true;
+    // Between two relayed copies, fewer hops first: the medium is only the
+    // first hop's (see the same rule in the full ingest below). Speed decides
+    // between two direct hearings, and between relayed copies of one length.
+    final newHops = p.hops + 1;
+    final bool upgrade;
+    if (direct != existingDirect) {
+      upgrade = direct;
+    } else if (!direct && newHops != existing.hops) {
+      upgrade = newHops < existing.hops;
+    } else {
+      upgrade = _speedRank(via) > _speedRank(existing.via);
     }
+    if (!upgrade) return true;
     final nextHop =
         p.headerType == RnsHeaderType.header2 ? p.transportId : null;
     log?.call('path ${key.substring(0, 8)} ${existing.via} -> $via '
@@ -1053,9 +1062,16 @@ class RnsTransport implements RnsInterfaceRegistry {
     // why removing the pin alone is not enough).
     final idHex = _hex(ann.identity.hash);
     final nowMs = DateTime.now().millisecondsSinceEpoch;
+    // Only a peer heard DIRECTLY is a neighbour on that medium. An announce a
+    // LAN neighbour relayed from four hops away arrives on the LAN too, and
+    // pinning on it made a station behind a public hub look like a host on
+    // this network: every later path of it was rewritten to a one-hop LAN
+    // path with no next hop, and what was sent on it went nowhere (measured
+    // 2026-10-15, desktop to a C3 station through rns.wisco.network).
+    final heardDirect = pathHops <= 1;
     final pin = _identityFastVia[idHex];
     if (pin != null) {
-      if (viaArg == pin.label) {
+      if (viaArg == pin.label && heardDirect) {
         pin.heardMs = nowMs; // still there — refresh liveness
         pin.misses = 0;
       } else if (_speedRank(viaArg) < _speedRank(pin.label)) {
@@ -1083,7 +1099,7 @@ class RnsTransport implements RnsInterfaceRegistry {
     // to that interface right now — otherwise a sibling dest whose own (rare,
     // broadcast) announce already landed on the hub would stay stuck there until
     // its next announce, and those are minutes apart / often dropped.
-    if (!_isAnnounceOnly(viaArg)) {
+    if (!_isAnnounceOnly(viaArg) && heardDirect) {
       final cur = _identityFastVia[idHex];
       if (cur == null || _speedRank(viaArg) > _speedRank(cur.label)) {
         _identityFastVia[idHex] = _FastVia(viaArg, nowMs);
@@ -1135,6 +1151,15 @@ class RnsTransport implements RnsInterfaceRegistry {
       final oldDirect = existing.hops <= 1;
       if (newDirect != oldDirect) {
         replace = newDirect;
+      } else if (!newDirect && pathHops != existing.hops) {
+        // Neither is direct: the medium named here is only the FIRST hop, and
+        // a LAN neighbour relaying into the internet is the hub path with one
+        // more hop in front. Measured 2026-10-15: a desktop asked for a path
+        // to a station two hops away through rns.wisco.network, a phone on
+        // its LAN answered first with its own 22-minute-old route through
+        // another hub, and the LAN rank kept that four-hop path over the
+        // two-hop one; nothing sent on it arrived. Fewer hops first.
+        replace = pathHops < existing.hops;
       } else if (newRank != oldRank) {
         replace = newRank > oldRank;
       } else {

@@ -78,6 +78,46 @@ void main() {
       expect(t.pathFor(a1.destHash)!.via, 'lan');
     });
 
+    test('not direct: fewer hops beat a faster first hop', () async {
+      // A LAN neighbour relaying a route four hops long must not shadow the
+      // two-hop route through a hub (both relayed, neither direct).
+      final id = await RnsIdentity.generate();
+      final far = (await _announce(id))..hops = 3;
+      await t.ingest(far, 'lan');
+      expect(t.pathFor(far.destHash)!.hops, 4);
+      final near = (await _announce(id))..hops = 1;
+      await t.ingest(near, 'tcp:hub');
+      expect(t.pathFor(far.destHash)!.via, 'tcp:hub');
+      expect(t.pathFor(far.destHash)!.hops, 2);
+      // ...and the LAN copy of a longer route does not take it back.
+      final again = (await _announce(id))..hops = 3;
+      await t.ingest(again, 'lan');
+      expect(t.pathFor(far.destHash)!.via, 'tcp:hub');
+    });
+
+    test('a shorter relayed copy of the SAME announce takes over', () async {
+      // The copy a LAN neighbour relays and the copy the hub answers with are
+      // one packet hash: the second goes through the duplicate path.
+      final id = await RnsIdentity.generate();
+      final a = await _announce(id);
+      a.hops = 3;
+      await t.ingest(a, 'lan');
+      expect(t.pathFor(a.destHash)!.via, 'lan');
+      a.hops = 1;
+      await t.ingest(a, 'tcp:hub');
+      expect(t.pathFor(a.destHash)!.via, 'tcp:hub');
+      expect(t.pathFor(a.destHash)!.hops, 2);
+    });
+
+    test('not direct, equal hops: the faster medium still wins', () async {
+      final id = await RnsIdentity.generate();
+      final viaHub = (await _announce(id))..hops = 1;
+      await t.ingest(viaHub, 'tcp:hub');
+      final viaLan = (await _announce(id))..hops = 1;
+      await t.ingest(viaLan, 'lan');
+      expect(t.pathFor(viaHub.destHash)!.via, 'lan');
+    });
+
     test('same medium: refresh keeps working (equal hops replace)', () async {
       final id = await RnsIdentity.generate();
       final a1 = await _announce(id);
