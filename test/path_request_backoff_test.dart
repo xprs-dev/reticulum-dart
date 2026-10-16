@@ -36,6 +36,19 @@ void main() {
   setUp(() {
     iface = _Iface('ble5');
     t = RnsTransport(transportId: Uint8List(16))..addInterface(iface);
+    // These tests are about which asks are made; the pacing of the ones
+    // that are made has its own test below.
+    t.pathRequestPace = Duration.zero;
+  });
+
+  test('asks leave paced, and none is lost', () async {
+    t.pathRequestPace = const Duration(milliseconds: 100);
+    for (var d = 0; d < 4; d++) {
+      t.requestPath(dest(0x40 + d));
+    }
+    expect(iface.sent.length, 1, reason: 'the first leaves at once');
+    await Future<void>.delayed(const Duration(milliseconds: 450));
+    expect(iface.sent.length, 4);
   });
 
   test('a destination is asked for ONCE, however often callers ask', () {

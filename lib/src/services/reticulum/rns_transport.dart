@@ -14,6 +14,7 @@
  * announce signature does not cover hops, so the original announce data is reused
  * verbatim.
  */
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -367,6 +368,66 @@ class RnsTransport implements RnsInterfaceRegistry {
     }
   }
 
+  /// Our own announce of [destHash]: every local interface, and each shared
+  /// hub ([RnsInterface.uplink]) at most once per [ownUplinkAnnounceGap], or
+  /// never when [uplinks] is false.
+  ///
+  /// A hub rations announces per destination: one sooner than its rate
+  /// target after the last is a violation, and past the grace it stops
+  /// re-broadcasting that destination for target plus penalty, telling
+  /// nobody (reference Transport.inbound). Measured 2026-10-15 on
+  /// rns.wisco.network: a client announcing every 10 s was passed six times,
+  /// then never again; this node re-announced every 30 s and was heard by
+  /// no other client at all. XPRS.md 12.12.1: a station MUST NOT announce
+  /// more often than the grace allows (see [ownUplinkAnnounceGap] for why
+  /// that is not yet enforced for our own). The path is still learned from a
+  /// muted announce, so path requests keep working; the first announce on a
+  /// hub connection always goes, so a reconnect is reachable at once.
+  void sendAnnounce(Uint8List raw, Uint8List destHash, {bool uplinks = true}) {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final d = _hex(destHash);
+    for (final i in _interfaces) {
+      if (!i.uplink) {
+        i.send(raw);
+        continue;
+      }
+      if (!uplinks) {
+        _uplinkAnnouncesHeld++;
+        continue;
+      }
+      final k = '${identityHashCode(i)}|$d';
+      final last = _uplinkAnnouncedMs[k];
+      if (last != null && nowMs - last < ownUplinkAnnounceGap.inMilliseconds) {
+        _uplinkAnnouncesHeld++;
+        continue;
+      }
+      _uplinkAnnouncedMs.remove(k);
+      if (_uplinkAnnouncedMs.length >= 4096) {
+        _uplinkAnnouncedMs.remove(_uplinkAnnouncedMs.keys.first);
+      }
+      _uplinkAnnouncedMs[k] = nowMs;
+      i.send(raw);
+    }
+  }
+
+  /// The shortest gap between two announces of one destination on one hub,
+  /// for what we relay.
+  Duration uplinkAnnounceGap = const Duration(hours: 1);
+
+  /// The same for our own announces, zero for now. A hub takes the NEWER of
+  /// two copies of an announce even when it is longer, and nodes built before
+  /// the relay rules below still lift a LAN neighbour's announces onto the
+  /// hubs every half minute; against them an hourly announce of our own lost
+  /// the hub's route to a relay, and answers sent that way never arrived
+  /// (measured 2026-10-16 on rns.wisco.network). Once no relay lifts LAN
+  /// announces, this goes to an hour, as XPRS.md 12.12.1 asks.
+  Duration ownUplinkAnnounceGap = Duration.zero;
+  final Map<String, int> _uplinkAnnouncedMs = {};
+
+  /// Announces of ours a hub was spared (see [sendAnnounce]).
+  int get uplinkAnnouncesHeld => _uplinkAnnouncesHeld;
+  int _uplinkAnnouncesHeld = 0;
+
   // The interface label a given link's traffic flows on (link_id hex -> label),
   // learned from inbound link packets. A link is sticky to the path it was
   // established on, so its DATA/parts must go out ONLY there — broadcasting link
@@ -636,12 +697,6 @@ class RnsTransport implements RnsInterfaceRegistry {
     final key = _hex(destHash);
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    _askAt.removeWhere((t) => nowMs - t > 60000);
-    if (_askAt.length >= _askesPerMinute) {
-      _askSuppressed++;
-      return;
-    }
-
     final st = _asked[key];
     if (st != null && !force && nowMs < st.nextMs) {
       _askSuppressed++;
@@ -652,27 +707,96 @@ class RnsTransport implements RnsInterfaceRegistry {
         : (st.waitMs * 2 > _askBackoffMaxMs ? _askBackoffMaxMs : st.waitMs * 2);
     _asked[key] = _AskState(nextMs: nowMs + waitMs, waitMs: waitMs);
     if (_asked.length > 512) _asked.remove(_asked.keys.first);
-    _askAt.add(nowMs);
-    final tag = Uint8List(16);
-    for (var i = 0; i < 16; i++) {
-      tag[i] = _rng.nextInt(256);
+    // Paced, not sent in a burst. A reference hub treats a client asking
+    // faster than three a second (on a connection under two hours old) as
+    // ingress limited, and stops answering it: measured on
+    // rns.wisco.network, a node that asked for 60 paths and then for one it
+    // knew the hub held got no answer in 40 s, against 0.8 s without the
+    // burst. This node asks for dozens at start-up. One every
+    // [pathRequestPace]; the rest wait their turn.
+    //
+    // The global cap queues rather than refuses, up to a minute's worth. It
+    // used to refuse, and a node that asks twenty paths a minute for its own
+    // overlay refused nearly every other ask: a station's beacon named where
+    // to write to it every minute and its path was asked for once in eight
+    // (measured 2026-10-16). A forced ask (somebody is waiting) goes first.
+    if (!_askQueue.any((d) => _eq(d, destHash))) {
+      if (_askQueue.length >= _askesPerMinute) {
+        if (!force) {
+          _askSuppressed++;
+          return;
+        }
+        _askQueue.removeLast();
+        _askSuppressed++;
+      }
+      if (force) {
+        _askQueue.insert(0, destHash);
+      } else {
+        _askQueue.add(destHash);
+      }
     }
-    // transport-enabled form: dest_hash(16) + our_transport_id(16) + tag(16).
-    final data = BytesBuilder();
-    data.add(destHash);
-    data.add(transportId ?? Uint8List(16));
-    data.add(tag);
-    final pkt = RnsPacket(
-      destHash: _pathRequestDest,
-      data: data.toBytes(),
-      headerType: RnsHeaderType.header1,
-      transportType: RnsTransportType.broadcast,
-      destType: RnsDestType.plain,
-      packetType: RnsPacketType.data,
-      context: RnsContext.none,
-      hops: 0,
-    );
-    sendOnAll(pkt.pack());
+    _askPump();
+  }
+
+  /// The gap between two path requests leaving this node.
+  Duration pathRequestPace = const Duration(milliseconds: 600);
+  final List<Uint8List> _askQueue = [];
+  int _askLastMs = 0;
+  Timer? _askTimer;
+
+  void _askPump() {
+    if (_askQueue.isEmpty || _askTimer != null) return;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    _askAt.removeWhere((t) => nowMs - t > 60000);
+    var wait = _askLastMs + pathRequestPace.inMilliseconds - nowMs;
+    if (_askAt.length >= _askesPerMinute) {
+      final free = _askAt.first + 60000 - nowMs + 1;
+      if (free > wait) wait = free;
+    }
+    if (wait > 0) {
+      _askTimer = Timer(Duration(milliseconds: wait), () {
+        _askTimer = null;
+        _askPump();
+      });
+      return;
+    }
+    _askLastMs = nowMs;
+    _askAt.add(nowMs);
+    _sendPathRequest(_askQueue.removeAt(0));
+    _askPump();
+  }
+
+  void _sendPathRequest(Uint8List destHash) {
+    // One tag PER INTERFACE. A transport answers a path request once per
+    // tag and drops later copies as duplicates. With one tag on every hub
+    // and the LAN, a neighbour that is a transport node on the same hubs
+    // forwarded our request too, its copy reached the station's hub first,
+    // and the hub answered the neighbour, not us: the path came back four
+    // hops long through another hub, and the hub's own two-hop answer never
+    // came (measured 2026-10-15, desktop and phone on rns.wisco.network).
+    // A tag of our own on each interface gets each its own answer.
+    for (final iface in _interfaces) {
+      final tag = Uint8List(16);
+      for (var i = 0; i < 16; i++) {
+        tag[i] = _rng.nextInt(256);
+      }
+      // transport-enabled form: dest_hash(16) + our_transport_id(16) + tag(16).
+      final data = BytesBuilder();
+      data.add(destHash);
+      data.add(transportId ?? Uint8List(16));
+      data.add(tag);
+      final pkt = RnsPacket(
+        destHash: _pathRequestDest,
+        data: data.toBytes(),
+        headerType: RnsHeaderType.header1,
+        transportType: RnsTransportType.broadcast,
+        destType: RnsDestType.plain,
+        packetType: RnsPacketType.data,
+        context: RnsContext.none,
+        hops: 0,
+      );
+      iface.send(pkt.pack());
+    }
     log?.call('path request -> ${_hex(destHash)}');
   }
 
@@ -1376,6 +1500,17 @@ class RnsTransport implements RnsInterfaceRegistry {
     if (viaIfaceForUplink?.uplink ?? false) {
       others = others.where((i) => !i.uplink);
     }
+    // Nor is an announce heard on the LAN. A neighbour there shares this
+    // network's internet and dials the hubs itself, and a hub takes the
+    // NEWER of two copies even when it is longer: the neighbour's LAN
+    // announces, every half minute, lifted by us, kept replacing its own
+    // direct route at the hub with one through us, and what the hub sent it
+    // that way was lost (measured 2026-10-15, desktop and phone on one LAN,
+    // a C3 station answering through rns.wisco.network). Bluetooth peers and
+    // the clients of our own hub have no other way up and are still lifted.
+    if (via == 'lan') {
+      others = others.where((i) => !i.uplink);
+    }
     if (edgeQuiet) {
       // Carry everything onward, but never onto a bearer that cannot afford
       // the flood.
@@ -1404,7 +1539,25 @@ class RnsTransport implements RnsInterfaceRegistry {
       hops: pathHops,
     );
     final raw = relay.pack();
+    final d = _hex(ann.destHash);
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
     for (final iface in targets) {
+      // A hub rations announces per DESTINATION, whoever sends them: a relay
+      // that repeats a destination faster than the hub's target mutes it for
+      // its owner too. Same budget as our own ([sendAnnounce]).
+      if (iface.uplink) {
+        final k = '${identityHashCode(iface)}|$d';
+        final last = _uplinkAnnouncedMs[k];
+        if (last != null && nowMs - last < uplinkAnnounceGap.inMilliseconds) {
+          _uplinkAnnouncesHeld++;
+          continue;
+        }
+        _uplinkAnnouncedMs.remove(k);
+        if (_uplinkAnnouncedMs.length >= 4096) {
+          _uplinkAnnouncedMs.remove(_uplinkAnnouncedMs.keys.first);
+        }
+        _uplinkAnnouncedMs[k] = nowMs;
+      }
       iface.send(raw);
       _announcesRebroadcast++;
     }

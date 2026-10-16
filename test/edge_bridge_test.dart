@@ -139,18 +139,20 @@ void main() {
       expect(lan.sent.length, 1, reason: 'local peers still learn it');
     });
 
+    // A client of our own hub has no other way up. (A LAN neighbour shares
+    // our internet and is not lifted: uplink_announce_budget_test.dart.)
     test('a LOCAL peer\'s announce still goes up to every hub', () async {
       final hubA = _FakeIface('tcp:a', uplink: true);
       final hubB = _FakeIface('tcp:b', uplink: true);
-      final lan = _FakeIface('lan');
+      final own = _FakeIface('tcps#1');
       final t = RnsTransport(transportId: Uint8List(16))
         ..edgeQuiet = true
         ..addInterface(hubA)
         ..addInterface(hubB)
-        ..addInterface(lan);
+        ..addInterface(own);
 
       final ann = await _announce();
-      expect(await t.ingest(ann, 'lan'), isNotNull);
+      expect(await t.ingest(ann, 'tcps#1'), isNotNull);
       expect(hubA.sent.length, 1);
       expect(hubB.sent.length, 1);
     });

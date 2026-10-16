@@ -156,6 +156,7 @@ class RnsTransportClient implements RnsInterfaceRegistry {
         if (msg.length > 6) _pathAnswers = msg[6] as int;
         if (msg.length > 7) _selfEcho = msg[7] as int;
         if (msg.length > 8) _rebroadcast = msg[8] as int;
+        if (msg.length > 9) _uplinkHeld = msg[9] as int;
         try {
           onStats?.call();
         } catch (_) {}
@@ -245,6 +246,14 @@ class RnsTransportClient implements RnsInterfaceRegistry {
   void ingestRaw(Uint8List raw, String via) => _send(['ingest', raw, via]);
 
   void sendOnAll(Uint8List raw) => _send(['sendOnAll', raw]);
+
+  /// [RnsTransport.sendAnnounce], on the engine.
+  void sendAnnounce(Uint8List raw, Uint8List destHash, {bool uplinks = true}) =>
+      _send(['sendAnnounce', raw, destHash, uplinks]);
+
+  /// [RnsTransport.uplinkAnnouncesHeld], mirrored with the other stats.
+  int get uplinkAnnouncesHeld => _uplinkHeld;
+  int _uplinkHeld = 0;
 
   void sendLinkAware(Uint8List raw) => _send(['sendLinkAware', raw]);
 
@@ -405,6 +414,7 @@ Future<void> _engineBody(SendPort toMain) async {
       transport.pathAnswersServed,
       transport.selfEchoDropped,
       transport.announcesRebroadcast,
+      transport.uplinkAnnouncesHeld,
     ]);
     final since = lastSweepMs;
     lastSweepMs = DateTime.now().millisecondsSinceEpoch;
@@ -460,6 +470,9 @@ Future<void> _engineBody(SendPort toMain) async {
           }
         case 'sendOnAll':
           transport.sendOnAll(msg[1] as Uint8List);
+        case 'sendAnnounce':
+          transport.sendAnnounce(msg[1] as Uint8List, msg[2] as Uint8List,
+              uplinks: msg[3] as bool);
         case 'sendLinkAware':
           transport.sendLinkAware(msg[1] as Uint8List);
         case 'noteLinkIface':
