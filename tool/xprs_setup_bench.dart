@@ -160,6 +160,10 @@ Future<void> main(List<String> argv) async {
 
   String sealed(Uint8List station, String body) {
     final blob = XprsCrypto.encryptFor(d, station, Uint8List.fromList(utf8.encode(body)))!;
+    // No k: here: a sealed body plus sig plus k: overruns the 250-byte packet.
+    // The station must already hold this sender's key -- from the owner list,
+    // or, for a non-owner WiFi offer (11.9.1), from a t:identity it heard
+    // (the `identity` step airs one). peer_key() on the station side.
     return sign('t:command f:$me d:$to ts:${stamp()} x:${b64u(blob)}', d);
   }
 
@@ -184,6 +188,15 @@ Future<void> main(List<String> argv) async {
       await Future.delayed(const Duration(seconds: 14));
       send(w);
       await result(idOf(w), secs: 10);
+    case 'identity':
+      // Air this sender's signed t:identity so a station that has never heard
+      // it can verify its later (keyless, sealed) commands -- the non-owner
+      // WiFi case (11.9.1). A real device on the mesh does this on its own.
+      final w = sign('t:identity f:$me ts:${stamp()} k:$npub', d);
+      send(w);
+      await Future.delayed(const Duration(seconds: 2));
+      send(w);
+      stdout.writeln('aired t:identity for $me');
     case 'wifi':
       final k = await stationKey();
       final body = 'cmd:set\nssid:${arg(argv, 'ssid')}\npass:${arg(argv, 'pass')}';
