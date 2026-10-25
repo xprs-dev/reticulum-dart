@@ -86,6 +86,11 @@ class Ble5Bus {
   StreamSubscription? _gattSub;
   bool _scanning = false;
   bool? _supported;
+  bool _unknownLogged = false;
+
+  /// The controller has answered [supported] one way or the other. False
+  /// while every probe so far ran with Bluetooth switched off.
+  bool get supportKnown => _supported != null;
 
   // ── Scan self-healing ────────────────────────────────────────────────────
   // Some devices (vendor power managers, BT adapter restarts) silently kill a
@@ -171,14 +176,29 @@ class Ble5Bus {
   }
 
   /// Whether the device supports BLE 5 extended advertising.
+  ///
+  /// Cached once the controller has ANSWERED. Native says null while the
+  /// adapter is off -- Android answers "no" to every LE capability question
+  /// in that state -- and that null comes back as false but is NOT cached, so
+  /// the next call asks again ([supportKnown] says which it was). Caching it
+  /// cost a BLE5 phone its whole session as a scan-only leaf because Bluetooth
+  /// was switched on a few seconds after the app (docs/ble5.md section 5).
   Future<bool> supported() async {
     final cached = _supported;
     if (cached != null) return cached;
-    bool ok;
+    bool? ok;
     try {
-      ok = (await _method.invokeMethod<bool>('supported')) ?? false;
+      ok = await _method.invokeMethod<bool>('supported');
     } catch (_) {
-      ok = false;
+      ok = false; // no native side here (desktop): a definitive no
+    }
+    if (ok == null) {
+      if (!_unknownLogged) {
+        _unknownLogged = true;
+        onLog?.call('BLE5: controller capability unknown (Bluetooth is off) '
+            '-- asking again until it answers');
+      }
+      return false;
     }
     _supported = ok;
     if (ok) {
