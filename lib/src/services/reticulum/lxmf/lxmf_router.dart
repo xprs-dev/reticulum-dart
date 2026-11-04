@@ -59,7 +59,16 @@ enum LxmfDelivery {
   failed,
 }
 
-class _LxIn {
+/// An inbound link we answered. Anyone can open one, so the table of them is
+/// bounded: an entry goes when its link is closed, when it has been idle for
+/// [LxmfRouter.inboundIdle], and the least recently used goes first once
+/// [LxmfRouter.inboundCap] are held (docs/performance.md 8.6, 8.18).
+abstract class _Inbound {
+  int lastMs = DateTime.now().millisecondsSinceEpoch;
+  void touch() => lastMs = DateTime.now().millisecondsSinceEpoch;
+}
+
+class _LxIn extends _Inbound {
   final RnsLink link;
   RnsResourceReceiver? rx;
   Uint8List? proof; // cached LRPROOF bytes, replayed on a repeated request
@@ -140,6 +149,33 @@ class LxmfRouter {
 
   final Map<String, _LxIn> _in = {};
   final Map<String, _LxOut> _out = {};
+
+  /// How long an answered link may sit silent before it is forgotten, and how
+  /// many may be held at once. Every inbound link used to be kept for the life
+  /// of the process — link and session state per request, from anyone.
+  static const Duration inboundIdle = Duration(minutes: 10);
+  static const int inboundCap = 256;
+
+  /// Answered links currently held (delivery + propagation), for status.
+  int get inboundLinks => _in.length + _propIn.length;
+
+  /// Answered links dropped by the idle sweep or the cap, for status.
+  int inboundEvicted = 0;
+
+  void _sweepInbound<T extends _Inbound>(Map<String, T> m) {
+    final cutoff =
+        DateTime.now().millisecondsSinceEpoch - inboundIdle.inMilliseconds;
+    final before = m.length;
+    m.removeWhere((_, e) => e.lastMs < cutoff);
+    if (m.length >= inboundCap) {
+      final oldest = m.entries.toList()
+        ..sort((a, b) => a.value.lastMs.compareTo(b.value.lastMs));
+      for (final e in oldest.take(m.length - inboundCap + 1)) {
+        m.remove(e.key);
+      }
+    }
+    inboundEvicted += before - m.length;
+  }
 
   // ── Store-and-forward (cooperative peer mailbox) ─────────────────────────
   // Every node is a propagation node for its peers: a message we couldn't
@@ -243,6 +279,11 @@ class LxmfRouter {
       final id = _hex(p.destHash);
       final i = _in[id];
       if (i != null) {
+        if (p.context == RnsContext.linkClose) {
+          _in.remove(id);
+          return true;
+        }
+        i.touch();
         await _onIn(i, p);
         return true;
       }
@@ -253,6 +294,11 @@ class LxmfRouter {
       }
       final pi = _propIn[id];
       if (pi != null) {
+        if (p.context == RnsContext.linkClose) {
+          _propIn.remove(id);
+          return true;
+        }
+        pi.touch();
         await _onPropIn(pi, p);
         return true;
       }
@@ -403,6 +449,7 @@ class LxmfRouter {
     try {
       final link = await RnsLink.responder(identity, request);
       final e = _LxIn(link);
+      _sweepInbound(_in);
       _in[id] = e;
       final proof = (await link.buildProof()).pack();
       e.proof = proof;
@@ -583,6 +630,7 @@ class LxmfRouter {
     try {
       final link = await RnsLink.responder(identity, request);
       final e = _PropIn(link);
+      _sweepInbound(_propIn);
       _propIn[id] = e;
       final proof = (await link.buildProof()).pack();
       e.proof = proof;
@@ -808,7 +856,7 @@ class LxmfRouter {
       b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
 }
 
-class _PropIn {
+class _PropIn extends _Inbound {
   final RnsLink link;
   RnsResourceSender? sender; // serving a held-message batch as a resource
   String? servedFor; // recipient hex whose mailbox we're serving

@@ -12,12 +12,26 @@ import 'dart:typed_data';
 import '../../util/media_archive.dart';
 import 'file_transfer.dart';
 
-class MediaFileSource implements FileSource {
+class MediaFileSource implements RangedFileSource {
   final MediaArchive archive;
   MediaFileSource(this.archive);
 
   @override
   Uint8List? read(Uint8List fileHash) => archive.get(_hex(fileHash));
+
+  /// One piece, sliced by SQLite. Before this was a [RangedFileSource], every
+  /// GET_RANGE from a peer loaded the whole BLOB to cut 64 KiB out of it.
+  @override
+  Uint8List? readRange(Uint8List fileHash, int offset, int length) =>
+      archive.readRange(_hex(fileHash), offset, length);
+
+  /// Everything or nothing (the archive holds whole files), learned from the
+  /// size column instead of from the bytes.
+  @override
+  PieceMask? pieceMask(Uint8List fileHash, int pieceSize) {
+    final n = archive.sizeOf(_hex(fileHash));
+    return n == null ? null : PieceMask.full(n, pieceSize);
+  }
 
   /// Whether the archive holds [fileHash] (cheap, no blob read).
   bool has(Uint8List fileHash) => archive.has(_hex(fileHash));

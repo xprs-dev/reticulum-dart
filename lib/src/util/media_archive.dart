@@ -732,6 +732,44 @@ class MediaArchive {
     }
   }
 
+  /// The byte length of a held entry, from its `size` column: no blob read.
+  /// Null when absent.
+  int? sizeOf(String tokenOrSha256) {
+    final key = _keyOf(tokenOrSha256);
+    final db = _ensureDb();
+    if (key == null || db == null) return null;
+    try {
+      final rows = db.select('SELECT size FROM media WHERE sha256=?', [key]);
+      if (rows.isEmpty) return null;
+      return rows.first['size'] as int;
+    } catch (e) {
+      debugPrint('MediaArchive: sizeOf failed: $e');
+      return null;
+    }
+  }
+
+  /// Bytes `[offset, offset+length)` of a held entry, sliced by SQLite
+  /// (`substr` on a BLOB reads only the pages it needs), so serving one piece
+  /// of a 16 MB file does not put 16 MB on the heap (docs/performance.md 8.9).
+  /// Null when absent or [offset] is past the end. Not counted as an access:
+  /// a swarm asking for 256 pieces is one fetch, not 256.
+  Uint8List? readRange(String tokenOrSha256, int offset, int length) {
+    final key = _keyOf(tokenOrSha256);
+    final db = _ensureDb();
+    if (key == null || db == null || offset < 0 || length <= 0) return null;
+    try {
+      final rows = db.select(
+          'SELECT substr(data, ?, ?) AS part, size FROM media WHERE sha256=?',
+          [offset + 1, length, key]);
+      if (rows.isEmpty) return null;
+      if (offset >= (rows.first['size'] as int)) return null;
+      return rows.first['part'] as Uint8List;
+    } catch (e) {
+      debugPrint('MediaArchive: readRange failed: $e');
+      return null;
+    }
+  }
+
   /// Bump last-accessed without reading the blob (e.g. a token was seen
   /// on-air and the bytes are already here).
   void touch(String tokenOrSha256) {
