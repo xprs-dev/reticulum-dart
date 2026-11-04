@@ -8,7 +8,7 @@
  */
 import 'dart:typed_data';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/src/services/files/serve_quota.dart';
 
 final _sha = Uint8List.fromList(List.filled(32, 7));

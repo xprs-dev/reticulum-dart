@@ -18,7 +18,7 @@ import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
 import 'package:sqlite3/open.dart';
 

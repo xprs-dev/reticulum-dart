@@ -5,7 +5,7 @@
 // 31-byte advertising path that forced a ~167-byte announce into ~14 chunks.
 import 'package:flutter/services.dart';
 
-import '../../services/reticulum/rns_ble_interface.dart';
+import 'package:reticulum/reticulum.dart' show RnsBleRadio;
 import 'ble5_bus.dart';
 
 class Ble5Radio implements RnsBleRadio {

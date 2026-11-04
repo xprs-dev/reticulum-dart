@@ -10,7 +10,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
 
 /// One side of a 2-node loopback: parses raw bytes back into packets and feeds

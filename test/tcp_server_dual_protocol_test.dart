@@ -8,7 +8,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:reticulum/reticulum.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 class _Registry implements RnsInterfaceRegistry {
   final added = <RnsInterface>[];

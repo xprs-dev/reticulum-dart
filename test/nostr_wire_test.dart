@@ -2,7 +2,7 @@
  * NOSTR relay wire codec + filter matcher — the transport-agnostic protocol
  * surface. No sockets: encode/decode the NIP-01 JSON frames and match filters.
  */
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
 
 NostrEvent _signed(NostrKeyPair kp,

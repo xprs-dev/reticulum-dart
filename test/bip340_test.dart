@@ -3,7 +3,7 @@
 import 'dart:typed_data';
 
 import 'package:reticulum/src/util/xprs_crypto.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 Uint8List unhex(String h) => Uint8List.fromList(
     [for (var i = 0; i < h.length; i += 2) int.parse(h.substring(i, i + 2), radix: 16)]);

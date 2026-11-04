@@ -11,7 +11,7 @@
  */
 import 'dart:typed_data';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
 
 Uint8List _key(int seed) => Uint8List.fromList(List.filled(32, seed));

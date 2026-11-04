@@ -8,7 +8,7 @@
  */
 import 'dart:typed_data';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
 import 'package:reticulum/src/services/reticulum/rns_lan_interface.dart';
 

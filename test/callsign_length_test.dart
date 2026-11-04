@@ -13,7 +13,7 @@
  *     truncation of the same key is a different label
  */
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/src/util/nostr_crypto.dart';
 import 'package:reticulum/src/util/nostr_key_generator.dart';
 

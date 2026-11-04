@@ -7,7 +7,7 @@
  * them, and indistinguishable from "the network is quiet" — so the "keeps" here
  * are the load-bearing tests, not the "drops".
  */
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
 
 /// 64-hex pubkeys, as the wire uses.

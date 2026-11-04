@@ -10,7 +10,7 @@
 //
 // This is the end-to-end exercise of authority_log + atm_chain + bearer_token +
 // fraud, proving the pieces compose into a working coin.
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
 
 void main() {

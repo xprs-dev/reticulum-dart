@@ -8,7 +8,7 @@
  */
 import 'dart:typed_data';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
 
 String _privHex(int seed) => '00${seed.toRadixString(16).padLeft(2, '0')}'

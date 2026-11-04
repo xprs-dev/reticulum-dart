@@ -7,7 +7,7 @@
  * screen got older. Draining faster only moves the bottleneck. The fix is to stop
  * pouring: rank what arrived, and hand over the best few, newest-first.
  */
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
 
 NostrEvent _post(

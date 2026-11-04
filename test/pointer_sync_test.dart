@@ -8,7 +8,7 @@
  */
 import 'dart:typed_data';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
 import 'package:reticulum/src/services/files/dht/pointer_log.dart';
 import 'package:reticulum/src/services/files/dht/pointer_sync.dart';

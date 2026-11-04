@@ -5,7 +5,7 @@
  * The transport-node rebroadcast rules themselves are locked by
  * edge_bridge_test.dart; this locks the capacity→role gate that turns them on.
  */
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/src/services/files/capacity_policy.dart';
 import 'package:reticulum/src/services/social/relay_role.dart';
 

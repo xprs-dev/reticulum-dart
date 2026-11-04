@@ -6,7 +6,7 @@
  * must survive the round trip through a pref string, because a dashboard that
  * resets to zero on every app restart teaches the owner nothing.
  */
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/src/util/rate_ring.dart';
 
 void main() {

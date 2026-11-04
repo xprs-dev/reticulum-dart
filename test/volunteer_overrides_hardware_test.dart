@@ -10,7 +10,7 @@
  * the device as a leaf, and no indexer ever synced with it. A decision the
  * network never hears is not a decision.
  */
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/src/services/files/capacity_policy.dart';
 import 'package:reticulum/src/services/social/relay_role.dart';
 

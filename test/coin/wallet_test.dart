@@ -1,7 +1,7 @@
 import 'dart:ffi';
 import 'dart:io';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:sqlite3/open.dart';
 
 import 'package:reticulum/src/services/coin/bearer_token.dart';

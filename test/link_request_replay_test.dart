@@ -18,7 +18,7 @@
  */
 import 'dart:typed_data';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
 
 /// One side of a 2-node loopback. [duplicate] replays every packet it delivers,

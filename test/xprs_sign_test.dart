@@ -17,7 +17,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:reticulum/reticulum.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 Uint8List _unhex(String h) {
   final out = Uint8List(h.length ~/ 2);

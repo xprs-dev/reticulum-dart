@@ -5,7 +5,7 @@
  * a LoRa antenna is unremarkable on a Tuesday and the most valuable node on the
  * network the day the grid goes down — and a FIXED score cannot express that.
  */
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/src/services/social/listening_schedule.dart';
 import 'package:reticulum/src/services/social/node_profile.dart';
 

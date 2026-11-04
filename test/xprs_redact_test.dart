@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:pointycastle/export.dart' as pc;
 import 'package:reticulum/src/util/xprs_crypto.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 /// XPRS §9.2.1 — redacted packets (`((secret))` → `█` bars + `xr:`).
 void main() {

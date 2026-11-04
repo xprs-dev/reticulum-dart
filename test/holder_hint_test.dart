@@ -5,7 +5,7 @@
  * The redundancy is the point. What is NOT the point is making a client pick
  * blind and burn somebody's cellular data on a coin flip.
  */
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/src/services/files/dht/holder_hint.dart';
 import 'package:reticulum/reticulum.dart';
 

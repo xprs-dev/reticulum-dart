@@ -9,7 +9,7 @@
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
 
 /// Bring up an active Link pair (initiator + responder) sharing a session token.

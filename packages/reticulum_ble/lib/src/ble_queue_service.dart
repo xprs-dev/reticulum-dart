@@ -9,7 +9,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
-import 'ble_parcel.dart';
+import 'package:reticulum/reticulum.dart' hide debugPrint;
 
 // Adapted from XPRS: housekeeping runs on a plain periodic Timer (XPRS has
 // no MonitoredPeriodicTimer) and logging goes through debugPrint.

@@ -7,7 +7,7 @@
  *   - a quota is a CEILING, not a target — full is full, and no clever reason
  *     gets past it.
  */
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/src/services/social/archiver_policy.dart';
 import 'package:reticulum/src/services/social/retention_tier.dart';
 

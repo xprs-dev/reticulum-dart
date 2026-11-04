@@ -18,11 +18,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The package is plain Dart: no Flutter needed to test it.
+      - uses: dart-lang/setup-dart@v1
+
+      - run: dart pub get
+      - run: dart analyze
+      - run: dart test
+
+  # The BLE half needs Flutter's platform plugins, so it is analyzed with Flutter.
+  ble:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test
+      - name: Analyze reticulum_ble
+        working-directory: packages/reticulum_ble
+        run: |
+          flutter pub get
+          flutter analyze

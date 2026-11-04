@@ -1,0 +1,22 @@
+name: reticulum_ble
+description: >-
+  BLE transport for the reticulum package (BLE5 broadcast bus + GATT client and
+  server). The Flutter half of the stack; `reticulum` itself is plain Dart.
+version: 0.2.0
+repository: https://github.com/xprs-dev/reticulum-dart
+publish_to: none
+
+environment:
+  sdk: ^3.10.0
+  flutter: '>=3.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  reticulum:
+    path: ../..
+  bluetooth_low_energy: ^6.0.0   # BLE central + peripheral (GATT)
+  ble_peripheral: ^2.4.0         # BLE advertising (peripheral)
+
+dev_dependencies:
+  flutter_lints: ^5.0.0

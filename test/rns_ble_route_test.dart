@@ -8,7 +8,7 @@
 // nothing at all.
 import 'dart:typed_data';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/src/services/reticulum/rns_ble_interface.dart';
 
 /// Packet type lives in the low two bits of the header byte.

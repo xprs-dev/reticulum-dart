@@ -18,7 +18,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as c;
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:pointycastle/export.dart' as pc;
 import 'package:reticulum/src/util/xprs_crypto.dart';
 

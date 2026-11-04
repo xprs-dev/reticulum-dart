@@ -10,7 +10,7 @@
  */
 import 'dart:typed_data';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
 
 /// A valid secp256k1 scalar (well below the curve order) from a seed byte.

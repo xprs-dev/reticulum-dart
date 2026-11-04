@@ -6,7 +6,7 @@
  * The disaster case must not depend on code that only runs during a disaster.
  * So the test is: build ONE directory, ask it twice, and watch the answer move.
  */
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
 import 'package:reticulum/src/services/social/node_profile.dart';
 

@@ -103,10 +103,5 @@ export 'src/util/npd.dart';
 
 // ── BLE transport primitives (Flutter) ──────────────────────────────────
 export 'src/services/reticulum/rns_ble_interface.dart';
-export 'src/connections/bluetooth/ble5_bus.dart';
-export 'src/connections/bluetooth/ble5_radio.dart';
-export 'src/connections/bluetooth/ble_gatt_client.dart';
-export 'src/connections/bluetooth/ble_gatt_server.dart';
 export 'src/connections/bluetooth/ble_parcel.dart';
-export 'src/connections/bluetooth/ble_queue_service.dart';
 export 'src/connections/bluetooth/ble_reassembler.dart';

@@ -11,9 +11,11 @@ and network protocols** — share one identity, exchange messages, replicate
 notes, move files, and reach peers over TCP/UDP/BLE — without re-implementing
 any of it.
 
-Shipped as a **Flutter package** (BLE needs platform plugins). The whole core —
-Reticulum, NOSTR, LXMF, relay, DHT, files, XPRS — is plain Dart with no UI; only
-the BLE transport pulls in Flutter, so the rest stays portable.
+`reticulum` is a **plain Dart package**: Reticulum, NOSTR, LXMF, relay, DHT,
+files and XPRS run under `dart` alone, on a server as well as in an app. The BLE
+transport needs Flutter platform plugins, so it lives in its own package,
+[`packages/reticulum_ble`](packages/reticulum_ble), which Flutter apps add
+alongside.
 
 ---
 
@@ -29,7 +31,7 @@ the BLE transport pulls in Flutter, so the rest stays portable.
 | **DHT** | `DhtNode`, `DhtCore`, `RoutingTable`, `ProviderRecord` | Kademlia-style provider records so peers can find who holds a given hash. |
 | **File sharing** | `FileNode`, `FileTransfer`, `FileManifest`, `MediaArchive`, `FileSource`/`CompositeFileSource`, serve quota/stats | Content-addressed (`file:<sha256>`) sharing: a local archive, a serve budget, and transfer over Reticulum Resources. |
 | **XPRS signatures** | `xprs_crypto` | Compact (48-byte) secp256k1 Schnorr signatures over the same npub key — small enough to ride a single APRS line. |
-| **BLE transport** (Flutter) | `RnsBleInterface`, `Ble5Radio`/bus, GATT client/server, parcel + reassembler | Reticulum over Bluetooth LE: connectionless BLE5 broadcast for short frames and GATT for larger transfers. The app provides its own BLE service that drives these. |
+| **BLE transport** | `RnsBleInterface`, parcel + reassembler here; `Ble5Radio`/bus, GATT client/server in `reticulum_ble` (Flutter) | Reticulum over Bluetooth LE: connectionless BLE5 broadcast for short frames and GATT for larger transfers. The app provides its own BLE service that drives these. |
 
 A single barrel exports everything:
 
@@ -52,10 +54,24 @@ dependencies:
   #   git: { url: https://github.com/xprs-dev/reticulum-dart.git }
 ```
 
-Then `flutter pub get`. `MediaArchive`, `RelayEventStore`, etc. use the
-`sqlite3` package — add `sqlite3_flutter_libs` to your app for the native
-library. BLE uses `bluetooth_low_energy` + `ble_peripheral`; declare the usual
-Bluetooth/location permissions in your app.
+Then `dart pub get` (or `flutter pub get` in an app). `MediaArchive`,
+`RelayEventStore`, etc. use the `sqlite3` package: a Flutter app adds
+`sqlite3_flutter_libs` for the native library, a Dart program uses the
+system's `libsqlite3`.
+
+A Flutter app that wants the BLE transport also adds the sub-package, and
+declares the usual Bluetooth/location permissions:
+
+```yaml
+  reticulum_ble:
+    path: ../reticulum-dart/packages/reticulum_ble
+```
+
+```dart
+import 'package:reticulum_ble/reticulum_ble.dart'; // Ble5Bus, Ble5Radio, GATT
+```
+
+Tests run with `dart test`.
 
 ---
 

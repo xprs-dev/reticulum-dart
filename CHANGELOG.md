@@ -1,3 +1,14 @@
+## 0.2.0
+
+The package is plain Dart: it no longer depends on Flutter, so a server or a
+command-line program can use it with `dart` alone.
+
+- **Breaking:** `Ble5Bus`, `Ble5Radio`, `BleGattClient`, `BleGattServer` and
+  `BleQueueService` moved to the new Flutter package `packages/reticulum_ble`
+  (`import 'package:reticulum_ble/reticulum_ble.dart'`). `RnsBleInterface`,
+  `BleParcel` and the reassembler stay here.
+- Tests and tool harnesses use `package:test`; run them with `dart test`.
+
 ## 0.1.0
 
 Initial extraction from the Aurora app into the shared XPRS protocol package.

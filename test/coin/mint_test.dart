@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 import 'package:reticulum/src/services/coin/bearer_token.dart';
 import 'package:reticulum/src/services/coin/coin_keyset.dart';
