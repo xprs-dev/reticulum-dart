@@ -619,6 +619,9 @@ class _Engine {
   Set<String>? _myFollowsSent; // last contact-list set sent to main
   Timer? _timer;
   int _tickN = 0;
+  int _handoffBatches = 0;
+  int _handoffEvents = 0;
+  int _handoffLogMs = 0;
   int _healthTick = 0;
   bool _ok = false;
 
@@ -918,13 +921,26 @@ class _Engine {
 
     _syncMyFollows();
 
+    final handoffNow = DateTime.now().millisecondsSinceEpoch;
+    if (_handoffBatches > 0 && handoffNow - _handoffLogMs >= 60000) {
+      toMain.send({
+        'log': 'engine->main: $_handoffEvents events in $_handoffBatches '
+            'batches (last ${(handoffNow - _handoffLogMs) ~/ 1000}s)'
+      });
+      _handoffBatches = 0;
+      _handoffEvents = 0;
+      _handoffLogMs = handoffNow;
+    }
+
     // Drained events per wapp-facing sub.
     for (final sub in _drainSubs) {
       final evs = _hub.drainEvents(sub, max: 60);
       if (evs.isNotEmpty) {
         // The hand-off the feed depends on. Silent here = the gate kept posts and
-        // nobody ever saw them.
-        toMain.send({'log': 'engine->main: sub=$sub n=${evs.length}'});
+        // nobody ever saw them. Counted, and said once a minute below: a line
+        // per batch was most of the log ring while the firehose ran (perf §8.10).
+        _handoffBatches++;
+        _handoffEvents += evs.length;
         toMain.send({'snap': 'events', 'subId': sub, 'events': evs});
       }
     }
