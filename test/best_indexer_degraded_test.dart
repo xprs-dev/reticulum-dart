@@ -8,7 +8,6 @@
  */
 import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
-import 'package:reticulum/src/services/social/node_profile.dart';
 
 Future<RelayEntry> _entry(RelayDirectory dir, RelayAnnouncement a,
     {int hops = 1}) async {

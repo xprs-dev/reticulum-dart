@@ -6,7 +6,6 @@
  * blind and burn somebody's cellular data on a coin flip.
  */
 import 'package:test/test.dart';
-import 'package:reticulum/src/services/files/dht/holder_hint.dart';
 import 'package:reticulum/reticulum.dart';
 
 import 'dart:typed_data';

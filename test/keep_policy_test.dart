@@ -13,7 +13,6 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
-import 'package:reticulum/src/services/social/keep_policy.dart';
 import 'package:sqlite3/open.dart';
 
 void _useSystemSqlite() {

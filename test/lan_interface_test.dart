@@ -10,7 +10,6 @@ import 'dart:typed_data';
 
 import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
-import 'package:reticulum/src/services/reticulum/rns_lan_interface.dart';
 
 Uint8List _frame({required int headerType, required int packetType}) {
   final flags = (headerType << 6) | packetType;

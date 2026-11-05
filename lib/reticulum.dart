@@ -106,3 +106,15 @@ export 'src/services/reticulum/rns_ble_interface.dart';
 export 'src/connections/bluetooth/ble5_types.dart';
 export 'src/connections/bluetooth/ble_parcel.dart';
 export 'src/connections/bluetooth/ble_reassembler.dart';
+
+// Used by xprs_core (which must not import src/ directly).
+export 'src/services/social/archiver_policy.dart';
+export 'src/services/social/node_profile.dart';
+export 'src/services/social/listening_schedule.dart';
+export 'src/util/rate_ring.dart';
+export 'src/services/social/keep_policy.dart';
+export 'src/services/files/dht/pointer_sync.dart';
+export 'src/services/reticulum/rns_lan_interface.dart';
+export 'src/services/files/folder_popularity.dart';
+export 'src/services/files/dht/pointer_log.dart';
+export 'src/services/files/dht/holder_hint.dart';
