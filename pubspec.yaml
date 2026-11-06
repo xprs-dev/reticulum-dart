@@ -21,7 +21,6 @@ dependencies:
   cryptography: ^2.7.0      # X25519 / Ed25519 / AEAD (RNS link + folders)
   bech32: ^0.2.2            # npub / nsec encoding
   hex: ^0.2.0               # hex <-> bytes
-  sqlite3: ^2.4.0           # event store / media archive
   zx:                       # zxdb: the pure-Dart SQL database every store persists through (XDb)
     git:
       url: https://github.com/x1watt/zx.git
