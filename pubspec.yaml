@@ -24,7 +24,7 @@ dependencies:
   zx:                       # zxdb: the pure-Dart SQL database every store persists through (XDb)
     git:
       url: https://github.com/x1watt/zx.git
-      ref: 4ec20db8176b09c32172a66a40cfacbad12cb469
+      ref: b3b431c2d3901036d7da8367fccd09e9d4bb3d10
   file: ^7.0.0              # injectable filesystem (lib/src/util/file_system.dart): disk natively, the host's tree on web
   web_socket_channel: ^2.4.0 # wss:// NOSTR relays (native + web)
   archive: ^3.6.1           # BLE parcel (de)compression

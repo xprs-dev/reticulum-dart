@@ -14,6 +14,12 @@ import 'xdb.dart';
 /// Not durable: a commit is not fsynced. Copy-on-write means a crash can
 /// lose the last commits but never corrupts what came before; [durable]
 /// opens a store whose last commit must survive a power cut.
+///
+/// Passwords given to these stores are random keys (HKDF outputs of the
+/// profile master key, 256 bits), never words a person typed: scrypt's
+/// stretching adds nothing to them and its default cost (about a second
+/// per open on a phone, two dozen stores per unlock) is skipped
+/// (`scryptLog2N: 1`, kept in each file's header).
 ZxDbStoreOptions xdbStoreOptions({bool durable = false}) => ZxDbStoreOptions(
       compression: 'fast',
       durable: durable,
@@ -21,6 +27,7 @@ ZxDbStoreOptions xdbStoreOptions({bool durable = false}) => ZxDbStoreOptions(
       blockCacheBytes: 2 << 20,
       txnMemoryBytes: 16 << 20,
       lsmMemBytes: 4 << 20,
+      scryptLog2N: 1,
     );
 
 /// Opens (creating it if missing) the database file at [path]; `:memory:`
