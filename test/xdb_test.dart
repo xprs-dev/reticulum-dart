@@ -21,7 +21,7 @@ void main() {
     final rows = db.select('SELECT k, n, b, COUNT(*) AS c FROM t');
     expect(rows.columnNames, ['k', 'n', 'b', 'c']);
     expect(rows.single['k'], 'a');
-    expect(rows.single[1], 1);
+    expect(rows.single.columnAt(1), 1);
     expect(rows.single['b'], [1, 2, 3]);
     expect(rows.single['c'], 1);
     expect(rows.single.keys, ['k', 'n', 'b', 'c']);
@@ -118,6 +118,8 @@ void main() {
       if (db.bytes > peak) peak = db.bytes;
     }
     expect(db.bytes, lessThan(peak), reason: 'a compaction ran');
+    expect(db.liveBytes, greaterThan(0));
+    expect(db.liveBytes, lessThan(peak), reason: 'live data, not history');
     expect(db.select('SELECT v FROM t WHERE k = 1499').single['v'],
         'changed 1499');
     st.execute(['after', 0]);

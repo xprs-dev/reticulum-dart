@@ -151,8 +151,15 @@ abstract class XDb {
     }
   }
 
-  /// The database's size on disk, bytes (0 in memory).
+  /// The database's size on disk, bytes (0 in memory): what the disk
+  /// pays, history included until the next compaction.
   int get bytes;
+
+  /// The live data, bytes before compression: the pages the last commit
+  /// uses times the page size (SQLite's page_count * page_size; 0 in
+  /// memory). What a byte budget reads — [bytes] would count history the
+  /// next compaction drops, and a budget would evict live rows for it.
+  int get liveBytes;
 
   /// The file, or null in memory.
   String? get path;

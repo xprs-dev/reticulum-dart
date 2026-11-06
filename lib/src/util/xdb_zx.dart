@@ -178,6 +178,13 @@ class _ZxXDb extends XDb {
   int get bytes => _f._length();
 
   @override
+  int get liveBytes {
+    final d = _f.db;
+    if (d == null) return 0;
+    return d.store.livePages * d.store.options.pageSize;
+  }
+
+  @override
   String? get path => _f.path;
 
   @override
