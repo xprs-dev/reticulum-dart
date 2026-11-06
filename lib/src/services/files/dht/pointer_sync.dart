@@ -1,5 +1,5 @@
 /*
- * Indexer↔Indexer pointer sync — the two halves that talk (docs/NOSTR.md).
+ * Archiver↔Archiver pointer sync — the two halves that talk (docs/NOSTR.md).
  *
  * Serving:  answer "what changed since (epoch, seq)" from the pointer log, in
  *           bounded resumable batches, and say RESET rather than hand back a
@@ -7,8 +7,8 @@
  * Merging:  take a peer's batch, VERIFY every record against the provider that
  *           signed it, and apply it idempotently.
  *
- * Indexer-to-indexer traffic is fast and wired, so this is where the load should
- * sit: the phones announce once, and the Indexers spread it among themselves.
+ * Archiver-to-archiver traffic is fast and wired, so this is where the load should
+ * sit: the phones announce once, and the Archivers spread it among themselves.
  * Battery-powered leaves are never sync partners — they announce, they are
  * indexed, they are left alone. That asymmetry is the whole reason the role
  * exists.
@@ -111,8 +111,8 @@ class PointerSyncClient {
   /// Merge one SYNC_RES batch.
   ///
   /// Every record is verified against the provider that signed it BEFORE it
-  /// enters our map. That is what makes gossip between indexers safe: we never
-  /// have to trust the indexer we are talking to, only the maths. An unsigned,
+  /// enters our map. That is what makes gossip between archivers safe: we never
+  /// have to trust the archiver we are talking to, only the maths. An unsigned,
   /// forged or expired record is dropped and counted — not relayed onward.
   Future<SyncOutcome> merge(
     String epoch,
@@ -149,7 +149,7 @@ class PointerSyncClient {
         continue;
       }
       // The provider signed it, not the peer that just handed it to us. So a
-      // relaying indexer can neither forge a pointer nor resurrect a dead one.
+      // relaying archiver can neither forge a pointer nor resurrect a dead one.
       if (!await rec.verify()) {
         rejected++;
         continue;

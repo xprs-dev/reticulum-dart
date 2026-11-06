@@ -1,5 +1,5 @@
 /*
- * RelayNode — a NOSTR relay/indexer endpoint on the Dart Reticulum stack.
+ * RelayNode — a NOSTR relay/archiver endpoint on the Dart Reticulum stack.
  *
  * Registers an 'xprs'/['relay'] destination and answers relay requests over an
  * RnsLink (responder side): EVENT publishes an event into the local
@@ -97,11 +97,11 @@ class RelayNode {
   int reqsServed = 0;
   int probesAnswered = 0;
 
-  /// The pointer map this node syncs with other indexers (docs/NOSTR.md).
+  /// The pointer map this node syncs with other archivers (docs/NOSTR.md).
   ///
-  /// Set by the host on an INDEXER; null on a leaf, and that is the point:
-  /// battery-powered leaves announce, are indexed, and are left alone. Indexer-
-  /// to-indexer traffic is fast and wired, so the load belongs there. A node
+  /// Set by the host on an ARCHIVER; null on a leaf, and that is the point:
+  /// battery-powered leaves announce, are indexed, and are left alone. Archiver-
+  /// to-archiver traffic is fast and wired, so the load belongs there. A node
   /// with none simply answers SYNC_RESET with an empty epoch, which an asker
   /// reads as "this peer has no map to give".
   PointerSyncServer? pointerServer;
@@ -270,7 +270,7 @@ class RelayNode {
     return r?.events ?? const [];
   }
 
-  /// Pull one batch of pointer changes from another indexer.
+  /// Pull one batch of pointer changes from another archiver.
   ///
   /// Returns the peer's answer, or null if it had nothing to say. A RESET is
   /// reported as [SyncOutcome.wasReset] with the peer's epoch: the caller drops
@@ -279,7 +279,7 @@ class RelayNode {
   ///
   /// Every record inside is verified against the PROVIDER that signed it before
   /// it can enter our map (see PointerSyncClient), so we never have to trust the
-  /// indexer we are talking to — only the maths.
+  /// archiver we are talking to — only the maths.
   Future<SyncOutcome?> syncPointers(
     RnsIdentity peer,
     PointerSyncClient client, {
@@ -345,7 +345,7 @@ class RelayNode {
     return (r != null && r.op == RelayOp.dropRes) ? r.count : 0;
   }
 
-  /// Indexer side: deliver any mail queued for [recipient] (now believed online)
+  /// Archiver side: deliver any mail queued for [recipient] (now believed online)
   /// via [router]. Removes each message once delivered. Returns delivered count.
   Future<int> flushFor(RnsIdentity recipient, LxmfRouter router) async {
     final destHex =

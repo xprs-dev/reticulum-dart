@@ -1,12 +1,12 @@
 /*
  * DHT maintenance: age buckets and previewed sweeps (aurora/docs/NOSTR.md,
- * the Indexer's maintenance tools).
+ * the Archiver's maintenance tools).
  *
  * Two properties carry the weight:
  *  - a PREVIEW frees nothing — a cleanup tool that cannot tell you what it is
  *    about to delete is not a tool, it is a gamble;
  *  - every real removal is handed to the caller, because a dead address must
- *    PROPAGATE (via the pointer log) as surely as a new one — an indexer that
+ *    PROPAGATE (via the pointer log) as surely as a new one — an archiver that
  *    cleans up silently keeps its neighbours serving ghosts.
  */
 import 'dart:typed_data';

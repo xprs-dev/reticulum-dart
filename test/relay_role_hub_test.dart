@@ -19,7 +19,7 @@ void main() {
     final p = _situation(NetKind.wifi, true);
     expect(p.unlimited, isTrue);
     final a = RelayAnnouncement.forCapacity(p, interests);
-    expect(a.isIndexer, isTrue);
+    expect(a.isArchiver, isTrue);
     expect(a.caps & RelayCap.transport, isNot(0),
         reason: 'the node that can index can also forward for its neighbours');
   });
@@ -28,7 +28,7 @@ void main() {
     final p = _situation(NetKind.cellular, false);
     expect(p.unlimited, isFalse);
     final a = RelayAnnouncement.forCapacity(p, interests);
-    expect(a.isIndexer, isFalse);
+    expect(a.isArchiver, isFalse);
     expect(a.caps & RelayCap.transport, 0,
         reason: 'a pocket device is never volunteered as a hub');
   });

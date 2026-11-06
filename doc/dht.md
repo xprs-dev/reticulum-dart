@@ -347,7 +347,7 @@ the same serial‑query‑times‑timeout trap that produced the original hang. 
 The XOR‑closest set is mostly **ephemeral** here (phones that sleep), so a record
 can vanish on churn. To keep records alive on **always‑on** nodes without a wire
 change, the DHT uses *persistence anchors*: a small, stable set of holders the
-owner injects (`DhtNode.anchors`). XPRS feeds it the **relay indexers** from
+owner injects (`DhtNode.anchors`). XPRS feeds it the **relay archivers** from
 `RelayDirectory` filtered to a stable capacity class (`capacity ≤ kCapHomeWifi`),
 excluding self, top few by capacity/freshness — capacity is **already advertised**
 on the relay announce, so nothing new goes on the wire.
@@ -363,8 +363,8 @@ This decouples persistence and findability from XOR distance. Two consequences:
 `k`** (§2) — once anchors guarantee findability, the XOR‑walk can use a small
 Kademlia `k` as a secondary path. **XPRS runs `k=20`/`alpha=6`** on top of this
 (the library default stays a safe `96`/`12` for consumers without anchors). Note:
-anchors hold records for many keys, so an indexer reaches the anti‑abuse
-`maxStoredKeys` cap (§9) sooner — a higher cap for indexers is a future knob (the
+anchors hold records for many keys, so an archiver reaches the anti‑abuse
+`maxStoredKeys` cap (§9) sooner — a higher cap for archivers is a future knob (the
 caps are already constructor params).
 
 ## 12. Completed follow-ups (this is a fresh deployment — no old-node interop)
@@ -385,6 +385,6 @@ The three items previously deferred are now done (no migration window to respect
   tenants.
 
 Residual: reply sizing only helps when the DHT link negotiates a large MTU (TCP
-paths); BLE/500-MTU links keep the small caps. Indexers (anchors) hold records for
+paths); BLE/500-MTU links keep the small caps. Archivers (anchors) hold records for
 many keys, so they reach the `maxStoredKeys` cap (§9) sooner — a higher cap for
-indexers remains a future knob (the caps are constructor params).
+archivers remains a future knob (the caps are constructor params).

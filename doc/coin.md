@@ -165,7 +165,7 @@ what rate. Earning, in priority order:
    that carried it and the recipient. Most earning is collecting what others spent.
 2. **Capped useful-work issuance** — net-new units granted for verifiable relay /
    store-and-forward delivery receipts (signed by the *recipient*, not the relayer)
-   and indexer uptime; capped per period to bound Sybil farming.
+   and archiver uptime; capped per period to bound Sybil farming.
 3. **Small bootstrap faucet** — a tiny grant so a newcomer can send their first
    above-free-tier message; sized by anchored trust flow from the community's
    anchors so spammer cliques with no inbound anchor edge earn ~nothing.

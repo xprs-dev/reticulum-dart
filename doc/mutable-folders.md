@@ -55,7 +55,7 @@ Two consequences:
 **Nobody needs a key to read or to host.** Anyone holding the public `folderId`:
 
 - fetches the already-signed keyset + op events (from a provider's relay or an
-  indexer), reduces them to the current `name → (sha256, metadata)` map,
+  archiver), reduces them to the current `name → (sha256, metadata)` map,
 - fetches each file by its sha over Reticulum, and **verifies it against the hash**,
 - can then **re-serve those bytes and relay those signed events** to others.
 

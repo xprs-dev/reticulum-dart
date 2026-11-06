@@ -1,5 +1,5 @@
 /*
- * The requests-per-hour ring (aurora/docs/NOSTR.md, the Indexer dashboard).
+ * The requests-per-hour ring (aurora/docs/NOSTR.md, the Archiver dashboard).
  *
  * The property under test is the bucket boundary: an hour that passes with no
  * events must appear as a ZERO, not be skipped — silence is data. And the ring

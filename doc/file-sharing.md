@@ -150,7 +150,7 @@ with a **SQLite FTS5** full‑text index (`relay_event_store.dart`):
   into an `events_fts` virtual table (`tokenize = 'unicode61'`).
 - `relaySearch(text)` runs `events_fts MATCH …` ranked by `bm25()` (best match
   first, ties broken by recency) and returns the matching events.
-- A node queries the **best peer indexer over a Reticulum link**
+- A node queries the **best peer archiver over a Reticulum link**
   (`RelayNode.query`, NIP‑01 filter + NIP‑50 `search`), falling back to its local
   store — again, no central index.
 
@@ -164,7 +164,7 @@ with a **SQLite FTS5** full‑text index (`relay_event_store.dart`):
 ```
 
 **Discovery** (which file?) is decoupled from **delivery** (who has the bytes?):
-text search on relay indexers finds the hash; the DHT finds the holders. Neither
+text search on relay archivers finds the hash; the DHT finds the holders. Neither
 step needs a central server.
 
 ## 7. Mutable folders — a directory layer on top
@@ -197,7 +197,7 @@ just to host — see [mutable-folders.md](mutable-folders.md).
 ## 8. Summary of guarantees
 
 - **No central content index.** Holders are found by walking a DHT toward the
-  file's hash (find‑by‑hash) or by querying peer relay indexers (find‑by‑text).
+  file's hash (find‑by‑hash) or by querying peer relay archivers (find‑by‑text).
   The only shared infrastructure is a Reticulum hub that *relays bytes*.
 - **No third‑party content host.** The public‑Blossom tier was removed; content
   travels over Reticulum / LAN / I2P / BitTorrent.

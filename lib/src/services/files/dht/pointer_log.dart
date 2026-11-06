@@ -1,18 +1,18 @@
 /*
- * The pointer log an Indexer syncs from (aurora/docs/NOSTR.md,
- * "Indexer↔Indexer sync — what changed?").
+ * The pointer log an Archiver syncs from (aurora/docs/NOSTR.md,
+ * "Archiver↔Archiver sync — what changed?").
  *
- * Indexers exchange ADDRESSES, never content: the unit is the signed
+ * Archivers exchange ADDRESSES, never content: the unit is the signed
  * ProviderRecord the DHT already stores. Because the PROVIDER signs it, an
- * Indexer can pass on a third party's record and the receiver still verifies it
- * end to end — a relaying Indexer can neither forge, retarget nor resurrect a
+ * Archiver can pass on a third party's record and the receiver still verifies it
+ * end to end — a relaying Archiver can neither forge, retarget nor resurrect a
  * pointer. That is what makes gossip between them safe, and what lets a fresh
- * Indexer fill its map from a peer instead of waiting for a thousand phones to
+ * Archiver fill its map from a peer instead of waiting for a thousand phones to
  * re-announce.
  *
  * The log is append-only and carries INSERTIONS AND REMOVALS, because "this
  * address is dead" must propagate as surely as "this address is new" — otherwise
- * every Indexer's map only ever grows and slowly fills with pointers to things
+ * every Archiver's map only ever grows and slowly fills with pointers to things
  * that are not there.
  *
  * ── The cursor, and why it is a position and not a time ─────────────────────
@@ -26,7 +26,7 @@
  *   1. An ESP32 coming back from a reboot has no idea what day it is — no RTC,
  *      no NTP, maybe no route to anything that has either. It cannot say "since
  *      Tuesday". It CAN persist eight bytes.
- *   2. Two Indexers with skewed clocks silently drop or duplicate records at the
+ *   2. Two Archivers with skewed clocks silently drop or duplicate records at the
  *      boundary of a time query. A position cannot skew: it is not a
  *      measurement, it is a place in one node's log, interpreted only by that
  *      node.
@@ -103,7 +103,7 @@ class PointerLog {
       );
 
   /// Record that a provider no longer holds [key] — it failed to serve, or its
-  /// record expired. This travels: an Indexer that never propagated removals
+  /// record expired. This travels: an Archiver that never propagated removals
   /// would hand out dead addresses for ever.
   int remove(Uint8List key, Uint8List providerPub, {int? nowMs}) => _append(
         key: key,
