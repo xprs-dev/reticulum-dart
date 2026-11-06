@@ -104,7 +104,12 @@ class Ble5Bus {
   int _scanStartMs = 0;
   bool _wantScan = false;
   Timer? _scanWatchdog;
-  static const int _silenceRestartMs = 150 * 1000;
+  /// Thirty minutes, not 150 s. The native side (Ble5.kt) restarts a silent
+  /// scan on its own at 2, 4, 8 and 16 minutes and backs off from there;
+  /// this one at 150 s pre-empted it every three minutes in an empty room
+  /// for the life of the process, so that backoff never got past its first
+  /// step. This is the net under a native watchdog that died, nothing more.
+  static const int _silenceRestartMs = 30 * 60 * 1000;
 
   /// Optional log sink (the app wires this to its log service).
   void Function(String msg)? onLog;

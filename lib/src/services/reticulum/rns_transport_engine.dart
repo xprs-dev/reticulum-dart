@@ -406,8 +406,13 @@ Future<void> _engineBody(SendPort toMain) async {
   // 2 s: 1,800 main-isolate wake-ups an hour on a phone in a pocket, for a
   // mirror nobody reads at that rate. A path upgrade that lands ten seconds
   // late is still a path upgrade.
+  // Posted only when a number moved, or once a minute regardless: a phone
+  // on its local bearers has nothing changing for hours, and every post
+  // woke the main isolate for a list it had already seen.
+  List<Object?> lastStats = const [];
+  var statsTicks = 0;
   Timer.periodic(const Duration(seconds: 10), (_) {
-    toMain.send([
+    final stats = <Object?>[
       'stats',
       transport.passive,
       transport.announceRatePerSec,
@@ -418,7 +423,16 @@ Future<void> _engineBody(SendPort toMain) async {
       transport.selfEchoDropped,
       transport.announcesRebroadcast,
       transport.uplinkAnnouncesHeld,
-    ]);
+    ];
+    var same = stats.length == lastStats.length;
+    for (var i = 0; same && i < stats.length; i++) {
+      same = stats[i] == lastStats[i];
+    }
+    if (!same || ++statsTicks >= 6) {
+      statsTicks = 0;
+      lastStats = stats;
+      toMain.send(stats);
+    }
     final since = lastSweepMs;
     lastSweepMs = DateTime.now().millisecondsSinceEpoch;
     var pushed = 0;
