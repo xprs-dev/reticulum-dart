@@ -236,6 +236,12 @@ class Ble5Bus {
   /// [supported] resolves true; conservative default before that.
   int get maxPayload => _maxPayload;
 
+  /// When the scan last delivered a frame carrying our marker, in ms since
+  /// the epoch; 0 before the first. The native scan is filtered on the
+  /// marker, so this is "when another XPRS radio was last heard", which is
+  /// what the app's PowerState reads to tell an empty room from a busy one.
+  int get lastFrameMs => _lastFrameMs;
+
   /// Route inbound frames of [subtype] to [handler]. One handler per subtype.
   void onFrame(int subtype, void Function(Ble5Frame) handler) =>
       _handlers[subtype] = handler;
@@ -457,6 +463,20 @@ class Ble5Bus {
       await _method.invokeMethod('setScanMode', {'mode': mode});
     } catch (e) {
       onLog?.call('BLE5: setScanMode($mode) failed: $e');
+    }
+  }
+
+  /// The legacy connectable presence advert's mode: 0 LOW_POWER (about one
+  /// advert a second), 1 BALANCED, 2 LOW_LATENCY (about ten a second). The
+  /// advert stays connectable in every mode, so a peer that hears it can
+  /// still dial; LOW_POWER only makes it slower to be found. Changing it
+  /// restarts that advert, so callers change it rarely (the same dwell as
+  /// [setScanMode]).
+  Future<void> setPresenceMode(int mode) async {
+    try {
+      await _method.invokeMethod('setPresenceMode', {'mode': mode});
+    } catch (e) {
+      onLog?.call('BLE5: setPresenceMode($mode) failed: $e');
     }
   }
 

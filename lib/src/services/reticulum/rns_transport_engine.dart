@@ -401,9 +401,12 @@ Future<void> _engineBody(SendPort toMain) async {
     ]);
   }
 
-  // Stats + changed-path sweep. The 2s cadence keeps the client mirror fresh
-  // for sibling-path upgrades that don't ride an accepted announce.
-  Timer.periodic(const Duration(seconds: 2), (_) {
+  // Stats + changed-path sweep. The cadence keeps the client mirror fresh
+  // for sibling-path upgrades that don't ride an accepted announce. It was
+  // 2 s: 1,800 main-isolate wake-ups an hour on a phone in a pocket, for a
+  // mirror nobody reads at that rate. A path upgrade that lands ten seconds
+  // late is still a path upgrade.
+  Timer.periodic(const Duration(seconds: 10), (_) {
     toMain.send([
       'stats',
       transport.passive,
