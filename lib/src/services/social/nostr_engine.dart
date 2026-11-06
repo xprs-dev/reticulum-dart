@@ -4,7 +4,7 @@
  *
  * The UI isolate saturating on a public firehose (hundreds of frames/s × N
  * relays) was the root of the "app not responding" reports: WebSocket receive,
- * JSON decode, BIP-340 verify, SQLite writes, and the like/reply/profile tallies
+ * JSON decode, BIP-340 verify, database writes, and the like/reply/profile tallies
  * all ran on the main isolate. Here every one of those runs inside the engine
  * isolate. The main side ([NostrClient]) only:
  *   - sends fire-and-forget COMMANDS (subscribe, publish, track, …), and
@@ -31,8 +31,6 @@ class _EngineInit {
   final String? persistPath;
   final String? selfPubHex;
 
-  /// Native SQLite library to load ON THIS ISOLATE, e.g. 'libsqlcipher.so'.
-  ///
   /// The database password (raw hex) for [storePath]. Null = plain file.
   final String? dbKeyHex;
 
@@ -47,7 +45,7 @@ class _EngineInit {
 
 /// Main-isolate proxy: mints subscription ids, forwards commands to the engine,
 /// and serves the wapp from caches the engine refreshes. Every method here is
-/// cheap (a map lookup or a port send) — no relay/SQLite work on this isolate.
+/// cheap (a map lookup or a port send) — no relay/database work on this isolate.
 class NostrClient {
   NostrClient._();
 
@@ -803,7 +801,7 @@ class _Engine {
   /// (so follows made on ANY client show up here, not just local follows).
   // Our own contact list changes when a new kind-3 arrives — which is rare and
   // which the hub tells us about. Recomputing it on every 400ms tick meant a
-  // sqlite query plus a re-parse of every p-tag (a contact list routinely has
+  // database query plus a re-parse of every p-tag (a contact list routinely has
   // thousands) 2.5 times a second, forever: a whole pegged core, for a value
   // that had not changed. The dedup guard below only ever suppressed the port
   // message, never the work. Gate on the STORED EVENT instead, and only re-read
@@ -852,7 +850,7 @@ class _Engine {
   //
   // The tick ran at 400ms unconditionally. On a phone with no network that is
   // 150 wake-ups a minute to drain subscriptions nothing is filling and to run
-  // a whole-table sqlite join for notifications that cannot have changed —
+  // a whole-table database join for notifications that cannot have changed —
   // measured at 98% of a core on a device with Bluetooth as its only interface,
   // with the log showing nothing but failed DNS lookups.
   //
@@ -917,7 +915,7 @@ class _Engine {
     // Notifications, straight from the store — they outlive the process and the
     // network, which is the whole reason they are stored.
     //
-    // EVERY 10 SECONDS, NOT EVERY TICK. This is a sqlite tag-join over the whole
+    // EVERY 10 SECONDS, NOT EVERY TICK. This is a database tag-join over the whole
     // events table, and at 400ms it owned the isolate's event loop: the relay
     // sockets live on this isolate, their handshakes and frames never got a turn,
     // and every websocket sat "connected" delivering nothing while a raw probe
@@ -992,7 +990,7 @@ class _Engine {
     //
     // A MISS must be remembered, not just a hit. _profSent only records pubkeys
     // whose kind-0 we found, so every author we've seen but whose profile never
-    // arrives (most of a public firehose) was re-queried against sqlite on
+    // arrives (most of a public firehose) was re-queried against the database on
     // EVERY 400ms tick, forever — hundreds of queries a second, no events, one
     // core pegged. Re-check a miss only occasionally: the profile can still
     // show up later, but it costs one query per pubkey per window, not 150.

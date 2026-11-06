@@ -10,7 +10,7 @@
  * resume on a fresh link (even after an app restart).
  *
  * A [PartialStore] holds those segment-aligned prefixes keyed by the file's
- * sha256. The default [FilePartialStore] is file-based (NOT sqlite — partials can
+ * sha256. The default [FilePartialStore] is file-based (NOT a database — partials can
  * be many MB/GB and would be pathological as blob rows): one `<sha>.part` of raw
  * bytes plus a tiny `<sha>.part.meta` JSON sidecar.
  */

@@ -52,9 +52,11 @@ dependencies:
   #   git: { url: https://github.com/xprs-dev/reticulum-dart.git }
 ```
 
-Then `flutter pub get`. `MediaArchive`, `RelayEventStore`, etc. use the
-`sqlite3` package — add `sqlite3_flutter_libs` to your app for the native
-library. BLE uses `bluetooth_low_energy` + `ble_peripheral`; declare the usual
+Then `flutter pub get`. `MediaArchive`, `RelayEventStore` and the other stores
+persist through zxdb (`package:zx`, pure Dart: a SQL database in a `.zx` file,
+SQLite's dialect, AES-256 by password), so no native database library is
+needed on any platform. A host that encrypts its storage sets `dbOpener` (and
+`blobRead` / `blobWrite` / `blobDelete`) at boot (`lib/src/util/db_opener.dart`). BLE uses `bluetooth_low_energy` + `ble_peripheral`; declare the usual
 Bluetooth/location permissions in your app.
 
 ---

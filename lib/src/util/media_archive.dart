@@ -9,15 +9,14 @@
 // (reserved — no Dart implementation exists yet), the SHA-1, a reusable
 // preview screenshot, and a description.
 //
-// Backed by SQLite (same rationale as geo_chat_archive.dart): WAL-journalled
-// atomic writes, a crash can't shred the file, one corrupt row never costs
-// the archive. The screenshot and metadata live in their own columns so list
-// views / previews never have to read the (potentially large) data blob.
+// Backed by zxdb (`media.zx`, an [XDb]): copy-on-write commits, so a crash
+// keeps the last good commit. The rows hold the metadata (screenshot and
+// metadata in their own columns, so list views / previews stay cheap); the
+// bytes are files `media/<storage key>` next to the database, read and written
+// through the injectable blobRead / blobWrite / blobDelete (db_opener.dart).
 //
 // How media bytes travel between stations is OUT OF SCOPE here — the archive
 // only answers "do I have the bytes for this hash" locally.
-//
-// Native only — SQLite needs dart:ffi. Every call is a no-op on web (kIsWeb).
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -200,7 +199,7 @@ class MediaArchive {
   /// the per-wapp dirs, e.g. `wappsDataStorage(prefs)`) so every wapp on the
   /// profile sees the same content-addressed store.
   static final Map<String, MediaArchive> _instances = {};
-  /// Open (or reuse) the archive stored under [directory] (one SQLite file per
+  /// Open (or reuse) the archive stored under [directory] (one `media.zx` per
   /// directory). The directory is created on first write.
   static MediaArchive forDirectory(String directory) =>
       _instances.putIfAbsent(directory,

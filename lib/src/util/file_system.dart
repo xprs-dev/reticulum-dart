@@ -1,6 +1,6 @@
 /// Injectable filesystem for every file this package reads or writes
 /// (follow sets, relay hub config, partial downloads, and the parent
-/// directories of its SQLite files).
+/// directories of its database files).
 ///
 /// Same shape as [dbOpener]: the default is the real disk on native targets
 /// and a host-injected tree on web, where dart:io compiles but every call

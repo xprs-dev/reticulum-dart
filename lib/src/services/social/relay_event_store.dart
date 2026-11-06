@@ -8,12 +8,13 @@
  * deduplicates by id, honours NIP-01 replaceable semantics, and answers:
  *   - NIP-01 filter queries (ids / authors / kinds / #tag / since / until / limit)
  *   - NIP-50 full-text SEARCH over post content + indexed tag values (file names,
- *     topics) via SQLite FTS5 — this is the "global text search" + "file search"
+ *     topics) via FTS5 (zxdb's fts5 module) — this is the "global text search" + "file search"
  *   - derived streams: feedForFollows, firehose, recentByTopic, popular
  *   - profile / follow lookups (latest kind-0 / kind-3 per author)
  *
- * Backed by SQLite (sqlite3, same rationale + open/WAL pattern as
- * media_archive.dart). Headless-safe: takes a plain DB path (':memory:' for
+ * Backed by zxdb (an [XDb] opened through dbOpener, same pattern as
+ * media_archive.dart). Foreign keys are parsed but not enforced, so tags are
+ * deleted explicitly. Headless-safe: takes a plain DB path (':memory:' for
  * tests) — the rns_service wiring resolves the real path via ProfileStorage.
  * No Flutter imports, so it runs under `dart run` for tool tests.
  */
@@ -256,7 +257,7 @@ class RelayEventStore {
     if (events.isEmpty) return 0;
     var stored = 0;
     // Collect during the tx, notify after COMMIT — never run hook code while
-    // sqlite holds the outer transaction.
+    // the database holds the outer transaction.
     final storedEvents = <NostrEvent>[];
     _db.execute('BEGIN');
     _inTx = true;
@@ -339,7 +340,7 @@ class RelayEventStore {
   int _pendingTier = 2;
   int _pendingReceivedSec = 0;
 
-  // True while putAllVerified holds an outer transaction: sqlite has no nested
+  // True while putAllVerified holds an outer transaction: the database has no nested
   // BEGIN, so _insert must not open its own.
   bool _inTx = false;
 

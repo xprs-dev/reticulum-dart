@@ -1,5 +1,5 @@
 /*
- * FileSource backed by the content-addressed MediaArchive (media.sqlite3).
+ * FileSource backed by the content-addressed MediaArchive (media.zx).
  *
  * Lets a serving node answer file-transfer requests with bytes it already holds
  * (received chat media, imported files, pinned content). The file-transfer
