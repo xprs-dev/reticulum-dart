@@ -1,40 +1,62 @@
-/// Injectable SQLite opener for every file-backed database this package
-/// creates (media archive, disk index, serve stats, relay event store,
-/// coin wallet).
+/// Injectable opener for every file-backed database this package creates
+/// (media archive, disk index, serve stats, relay event store, coin
+/// wallet). Every store holds an [XDb] (xdb.dart): zxdb, pure Dart.
 ///
 /// Host apps that encrypt their storage (XPRS's encrypted profiles) set
-/// [dbOpener] once at boot to an opener that applies the right SQLCipher
-/// key based on the database path. The default is a plain `sqlite3.open`
-/// on native targets, so nothing changes for hosts that don't inject.
-///
-/// Every store types its handle as [CommonDatabase] (package:sqlite3/common)
-/// rather than the FFI `Database`, because the browser build of the same
-/// package (package:sqlite3/wasm) returns a `CommonDatabase` backed by
-/// sqlite3.wasm over IndexedDB. The FFI half is only ever imported from
-/// `db_opener_io.dart`, which is what keeps `dart:ffi` out of the web build.
-/// A web host MUST inject both openers before any store is constructed; the
-/// web default throws so a forgotten injection is loud, not a plaintext or
-/// in-memory surprise.
+/// [dbOpener] once at boot to an opener that passes the right password
+/// for the database's path. The default opens the file plain.
 ///
 /// In-memory databases go through [dbMemoryOpener] for the same reason.
 library;
 
-import 'package:sqlite3/common.dart';
+import 'dart:typed_data';
 
-import 'db_opener_stub.dart' if (dart.library.io) 'db_opener_io.dart'
-    as platform;
+import 'file_system.dart';
+import 'xdb.dart';
+import 'xdb_zx.dart' as zx;
 
 /// Signature of a database opener: absolute path in, open handle out.
-typedef DbOpener = CommonDatabase Function(String path);
+typedef DbOpener = XDb Function(String path);
 
 /// Signature of an in-memory database opener.
-typedef DbMemoryOpener = CommonDatabase Function();
+typedef DbMemoryOpener = XDb Function();
 
 /// The opener used by all file-backed stores in this package. Replace at
-/// boot, BEFORE any store is constructed; swapping it later does not rekey
-/// already-open handles.
-DbOpener dbOpener = platform.defaultDbOpener;
+/// boot, BEFORE any store is constructed; swapping it later does not
+/// re-open already-open handles. The path `:memory:` opens a database in
+/// memory, as SQLite did (stores and tests pass it through).
+DbOpener dbOpener =
+    (path) => path == ':memory:' ? dbMemoryOpener() : zx.xdbOpenFile(path);
 
-/// The opener used for `:memory:` databases (tests, the coin wallet's
+/// The opener used for in-memory databases (tests, the coin wallet's
 /// in-memory mode).
-DbMemoryOpener dbMemoryOpener = platform.defaultDbMemoryOpener;
+DbMemoryOpener dbMemoryOpener = zx.xdbOpenMemory;
+
+// ── Blobs next to the databases ──────────────────────────────────────────
+//
+// Large values live in files beside the database, not in rows (xdb.dart:
+// a compaction rewrites every live page). A host that encrypts its storage
+// injects these three as well, so the bytes are as protected as the rows
+// that describe them; the defaults read and write the file as it is.
+
+/// Read the blob file at [path]; null when it does not exist.
+Uint8List? Function(String path) blobRead = (path) {
+  final f = fileSystem.file(path);
+  return f.existsSync() ? f.readAsBytesSync() : null;
+};
+
+/// Write the blob file at [path] (its folder is created), replacing it.
+void Function(String path, Uint8List bytes) blobWrite = (path, bytes) {
+  final f = fileSystem.file(path);
+  f.parent.createSync(recursive: true);
+  // Through a temporary name: a reader never sees half a blob.
+  final tmp = fileSystem.file('$path.tmp');
+  tmp.writeAsBytesSync(bytes, flush: true);
+  tmp.renameSync(path);
+};
+
+/// Remove the blob file at [path]; nothing when it is absent.
+void Function(String path) blobDelete = (path) {
+  final f = fileSystem.file(path);
+  if (f.existsSync()) f.deleteSync();
+};

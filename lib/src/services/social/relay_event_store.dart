@@ -20,7 +20,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:sqlite3/common.dart';
+import '../../util/xdb.dart';
+import '../../util/xdb_zx.dart';
 
 import '../../util/db_opener.dart';
 
@@ -91,31 +92,28 @@ class NostrFilter {
 class RelayEventStore {
   RelayEventStore._(this._db);
 
-  final CommonDatabase _db;
+  final XDb _db;
 
   /// Open (or create) a relay event store at [path]. Use ':memory:' for tests.
-  /// Throws if SQLite cannot be opened — callers running on web should not call
-  /// this (sqlite3 needs dart:ffi).
-  /// [keyHex] applies a SQLCipher key (raw 32-byte hex) to the database — used
-  /// when this store lives inside an encrypted profile and is opened on an
-  /// isolate that cannot reach the host's keyed opener.
+  /// [keyHex] is the database's password (raw 32-byte hex) — used when this
+  /// store lives inside an encrypted profile and is opened on an isolate
+  /// that cannot reach the host's keyed opener ([dbOpener] is per isolate).
   factory RelayEventStore.open(String path, {String? keyHex}) {
-    if (path != ':memory:') {
+    final XDb db;
+    if (path == ':memory:') {
+      db = dbMemoryOpener();
+    } else {
       final parent = fileSystem.file(path).parent;
       if (!parent.existsSync()) parent.createSync(recursive: true);
+      db = keyHex != null && keyHex.isNotEmpty
+          ? xdbOpenFile(path, password: keyHex)
+          : dbOpener(path);
     }
-    final db = dbOpener(path);
-    if (keyHex != null && keyHex.isNotEmpty) {
-      db.execute('PRAGMA key = "x\'$keyHex\'";');
-    }
-    db.execute('PRAGMA journal_mode = WAL;');
-    db.execute('PRAGMA synchronous = NORMAL;');
-    db.execute('PRAGMA foreign_keys = ON;');
     _migrate(db);
     return RelayEventStore._(db);
   }
 
-  static void _migrate(CommonDatabase db) {
+  static void _migrate(XDb db) {
     // Canonical events. `raw` holds the verbatim NIP-01 JSON so we can return
     // byte-faithful events; the columns are the query surface.
     db.execute('''
@@ -384,7 +382,9 @@ class RelayEventStore {
   }
 
   void _deleteById(String id) {
-    // tags cascade via FK; events_fts is contentless-external so delete by hand.
+    // zxdb parses foreign keys and does not enforce them, so the tags go by
+    // hand here (the one place an event is removed), as the index does.
+    _db.execute('DELETE FROM tags WHERE event_id = ?', [id]);
     _db.execute('DELETE FROM events_fts WHERE event_id = ?', [id]);
     _db.execute('DELETE FROM events WHERE id = ?', [id]);
   }
@@ -844,7 +844,7 @@ class RelayEventStore {
 
   // ── helpers ───────────────────────────────────────────────────────────────
 
-  List<NostrEvent> _rows(ResultSet rs) =>
+  List<NostrEvent> _rows(XRows rs) =>
       [for (final r in rs) _fromRaw(r['raw'] as String)!];
 
   NostrEvent? _fromRaw(String raw) {

@@ -11,18 +11,9 @@
  * anything arriving off the wire must still be rejected if its signature is
  * forged. Both halves are asserted here.
  */
-import 'dart:ffi';
-import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reticulum/reticulum.dart';
-import 'package:sqlite3/open.dart';
-
-void _useSystemSqlite() {
-  if (!Platform.isLinux) return;
-  open.overrideFor(
-      OperatingSystem.linux, () => DynamicLibrary.open('libsqlite3.so.0'));
-}
 
 const _privHex =
     '0001a3f19c8d2b4e6f70a3f19c8d2b4e6f70a3f19c8d2b4e6f701b2c00000001';
@@ -43,7 +34,6 @@ void main() {
   late RelayEventStore store;
   late String pub;
 
-  setUpAll(_useSystemSqlite);
 
   setUp(() {
     store = RelayEventStore.open(':memory:');

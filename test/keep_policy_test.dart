@@ -8,19 +8,10 @@
  * a keep can only ever PROMOTE. Nothing arriving off the wire may push a note
  * the user chose to keep back down into the evictable stranger slice.
  */
-import 'dart:ffi';
-import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reticulum/reticulum.dart';
 import 'package:reticulum/src/services/social/keep_policy.dart';
-import 'package:sqlite3/open.dart';
-
-void _useSystemSqlite() {
-  if (!Platform.isLinux) return;
-  open.overrideFor(
-      OperatingSystem.linux, () => DynamicLibrary.open('libsqlite3.so.0'));
-}
 
 const _authorPriv =
     '0001a3f19c8d2b4e6f70a3f19c8d2b4e6f70a3f19c8d2b4e6f701b2c00000001';
@@ -52,7 +43,6 @@ void main() {
   late RelayEventStore store;
 
   setUpAll(() {
-    _useSystemSqlite();
     _authorPub = NostrCrypto.derivePublicKey(_authorPriv);
     _minePub = NostrCrypto.derivePublicKey(_minePriv);
   });

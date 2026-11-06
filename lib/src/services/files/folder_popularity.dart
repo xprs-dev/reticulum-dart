@@ -18,7 +18,7 @@
  * Path-injectable (':memory:' for tests). Synchronous; headless. Time is passed
  * in (`nowMs`) so it is testable and never reaches for a wall clock itself.
  */
-import 'package:sqlite3/common.dart';
+import '../../util/xdb.dart';
 
 import '../../util/db_opener.dart';
 
@@ -33,13 +33,11 @@ class PopMonth {
 }
 
 class FolderPopularity {
-  final CommonDatabase _db;
+  final XDb _db;
   FolderPopularity._(this._db);
 
   factory FolderPopularity.open(String path) {
     final db = dbOpener(path);
-    db.execute('PRAGMA journal_mode = WAL;');
-    db.execute('PRAGMA synchronous = NORMAL;');
     // The current-ish months' raw unique ids (deleted on rollover).
     db.execute('''
       CREATE TABLE IF NOT EXISTS pop_live(

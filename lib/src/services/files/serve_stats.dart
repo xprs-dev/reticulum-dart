@@ -9,7 +9,7 @@
  *
  * Path-injectable (':memory:' for tests). Synchronous; headless.
  */
-import 'package:sqlite3/common.dart';
+import '../../util/xdb.dart';
 
 import '../../util/db_opener.dart';
 
@@ -32,15 +32,13 @@ class FolderServeStats {
 }
 
 class ServeStats {
-  final CommonDatabase _db;
+  final XDb _db;
   ServeStats._(this._db);
 
   static const int _msPerDay = 86400000;
 
   factory ServeStats.open(String path) {
     final db = dbOpener(path);
-    db.execute('PRAGMA journal_mode = WAL;');
-    db.execute('PRAGMA synchronous = NORMAL;');
     db.execute('''
       CREATE TABLE IF NOT EXISTS serve_daily(
         sha TEXT NOT NULL,

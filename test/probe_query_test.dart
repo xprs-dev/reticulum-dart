@@ -5,23 +5,10 @@
  * — not a single asymmetric operation. These tests assert exactly that, plus the
  * two fallbacks (peer has data; peer is an old node).
  */
-import 'dart:ffi';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reticulum/reticulum.dart';
-import 'package:sqlite3/open.dart';
-
-/// The test VM has libsqlite3.so.0 but not the bare `libsqlite3.so` symlink that
-/// the loader looks for by default, so point it at the real library. (Other
-/// tests dodge this with fake stores; this one exercises the REAL query path,
-/// because "did it actually find zero events" is the whole assertion.)
-void _useSystemSqlite() {
-  if (!Platform.isLinux) return;
-  open.overrideFor(
-      OperatingSystem.linux, () => DynamicLibrary.open('libsqlite3.so.0'));
-}
 
 Future<RelayNode> _node(RelayEventStore store,
     {required List<Uint8List> sent,
@@ -44,7 +31,6 @@ Future<RelayNode> _node(RelayEventStore store,
 void main() {
   late RelayEventStore store;
 
-  setUpAll(_useSystemSqlite);
   setUp(() => store = RelayEventStore.open(':memory:'));
   tearDown(() => store.close());
 

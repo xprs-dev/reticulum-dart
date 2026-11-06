@@ -3,16 +3,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' show sha256;
-import 'dart:ffi';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reticulum/reticulum.dart';
-import 'package:sqlite3/open.dart';
 
 void main() {
   // CI/dev hosts often ship only the runtime .so.0, not the dev symlink.
-  open.overrideFor(OperatingSystem.linux,
-      () => DynamicLibrary.open('libsqlite3.so.0'));
 
   late Directory dir;
   late MediaArchive archive;

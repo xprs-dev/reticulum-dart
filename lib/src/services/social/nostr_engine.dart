@@ -18,8 +18,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:isolate';
 
-import 'sqlite_library_override_stub.dart'
-    if (dart.library.io) 'sqlite_library_override_io.dart';
 
 import '../../util/nostr_crypto.dart';
 import '../../util/nostr_event.dart';
@@ -35,14 +33,7 @@ class _EngineInit {
 
   /// Native SQLite library to load ON THIS ISOLATE, e.g. 'libsqlcipher.so'.
   ///
-  /// package:sqlite3's loader override is PER-ISOLATE. A host that bundles
-  /// SQLCipher instead of stock SQLite (aurora does, for encrypted profiles)
-  /// sets its override on the main isolate — and the engine isolate then
-  /// tries to load a libsqlite3.so that is not in the app at all, throws, and
-  /// the whole NOSTR pipeline silently never starts.
-  final String? sqliteLibrary;
-
-  /// SQLCipher key (raw hex) for [storePath]. Null = plain database.
+  /// The database password (raw hex) for [storePath]. Null = plain file.
   final String? dbKeyHex;
 
   const _EngineInit(
@@ -50,7 +41,6 @@ class _EngineInit {
     this.storePath,
     this.persistPath,
     this.selfPubHex, {
-    this.sqliteLibrary,
     this.dbKeyHex,
   });
 }
@@ -143,7 +133,6 @@ class NostrClient {
     required String storePath,
     String? persistPath,
     String? selfPubHex,
-    String? sqliteLibrary,
     String? dbKeyHex,
   }) async {
     final c = NostrClient._();
@@ -155,7 +144,6 @@ class NostrClient {
         storePath,
         persistPath,
         selfPubHex,
-        sqliteLibrary: sqliteLibrary,
         dbKeyHex: dbKeyHex,
       ),
       debugName: 'nostr-engine',
@@ -562,9 +550,6 @@ class NostrClient {
     // "SocketException: Reading from a closed socket" from a dart:io timer, in
     // no stream we listen to, so no onError can catch it. Logged and survived.
     runZonedGuarded(() {
-      // The sqlite3 loader override is per-isolate: re-apply the host's choice
-      // of native library here, BEFORE anything opens a database.
-      applySqliteLibraryOverride(init.sqliteLibrary);
       // All store/relay setup runs on THIS (background) isolate.
       final engine = _Engine(
         init.toMain,

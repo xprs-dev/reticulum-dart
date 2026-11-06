@@ -23,7 +23,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
-import 'package:sqlite3/common.dart';
+import 'xdb.dart';
 
 import 'db_opener.dart';
 
@@ -178,7 +178,7 @@ class MediaFolder {
 }
 
 class MediaArchive {
-  MediaArchive._(this._dbPath);
+  MediaArchive._(this._dbPath, this._blobDir);
 
   /// Fired after bytes land, whichever door they came through: a chat
   /// download, a packet-lane assembly, a bulk-lane completion, a torrent, a
@@ -203,30 +203,40 @@ class MediaArchive {
   /// Open (or reuse) the archive stored under [directory] (one SQLite file per
   /// directory). The directory is created on first write.
   static MediaArchive forDirectory(String directory) =>
-      _instances.putIfAbsent(
-          directory, () => MediaArchive._('$directory/$_fileName'));
+      _instances.putIfAbsent(directory,
+          () => MediaArchive._('$directory/$_fileName', '$directory/media'));
 
-  static const String _fileName = 'media.sqlite3';
+  static const String _fileName = 'media.zx';
 
   final String _dbPath;
 
-  /// Where this archive's SQLite file lives. A caller that must move a large
-  /// blob (exporting a file so the OS can open it) opens this path on a WORKER
-  /// isolate and streams the row out, rather than pulling tens of MB through
-  /// [get] on the isolate that draws the UI.
+  /// Where the bytes live: one file per blob, named by its storage key
+  /// ([storageKeyOf]), read and written through [blobRead] / [blobWrite]
+  /// (encrypted on an encrypted profile). The database holds the metadata
+  /// only: a compaction rewrites every live page, and gigabytes of blobs
+  /// in rows would be rewritten with it (xdb.dart).
+  final String _blobDir;
+
+  /// Where this archive's database lives.
   String get dbPath => _dbPath;
+
+  /// The file holding the bytes of [key] (a [storageKeyOf] key). A caller
+  /// that must move a large blob (exporting a file so the OS can open it)
+  /// reads this path on a WORKER isolate rather than pulling tens of MB
+  /// through [get] on the isolate that draws the UI.
+  String blobPathOf(String key) => '$_blobDir/$key';
 
   /// The storage key for a token / hex sha256 / b64u hash — the same
   /// normalisation [get] and [has] apply, exposed so an off-isolate reader can
   /// look a row up without duplicating the rules.
   static String? storageKeyOf(String tokenOrSha256) => _keyOf(tokenOrSha256);
 
-  CommonDatabase? _db;
+  XDb? _db;
   bool _failed = false; // a fatal open error → operate degraded, never wipe
 
   // ── DB lifecycle ────────────────────────────────────────────────────────
 
-  CommonDatabase? _ensureDb() {
+  XDb? _ensureDb() {
     if (_failed) return null;
     final existing = _db;
     if (existing != null) return existing;
@@ -234,8 +244,6 @@ class MediaArchive {
       final parent = fileSystem.file(_dbPath).parent;
       if (!parent.existsSync()) parent.createSync(recursive: true);
       final db = dbOpener(_dbPath);
-      db.execute('PRAGMA journal_mode = WAL;');
-      db.execute('PRAGMA synchronous = NORMAL;');
       db.execute('''
         CREATE TABLE IF NOT EXISTS media(
           sha256      TEXT PRIMARY KEY,
@@ -248,8 +256,7 @@ class MediaArchive {
           first_seen  INTEGER NOT NULL,
           last_seen   INTEGER NOT NULL,
           size        INTEGER NOT NULL,
-          screenshot  BLOB,
-          data        BLOB NOT NULL
+          screenshot  BLOB
         );
       ''');
       db.execute('CREATE INDEX IF NOT EXISTS idx_media_ext ON media(ext);');
@@ -353,7 +360,7 @@ class MediaArchive {
       d == null ? null : (d.length > kMaxDescription ? d.substring(0, kMaxDescription) : d);
 
   /// Rebuild the FTS row for [key] from the current media row.
-  void _syncFts(CommonDatabase db, String key) {
+  void _syncFts(XDb db, String key) {
     try {
       db.execute('DELETE FROM media_fts WHERE sha256=?', [key]);
       final rows = db.select(
@@ -400,6 +407,14 @@ class MediaArchive {
 
   // ── API ─────────────────────────────────────────────────────────────────
 
+  /// The bytes first, the row after: a row never names a blob that is not
+  /// there. Content-addressed, so an existing file is already right.
+  void _writeBlob(String key, Uint8List data) {
+    final p = blobPathOf(key);
+    if (fileSystem.file(p).existsSync()) return;
+    blobWrite(p, data);
+  }
+
   /// Store [data]; returns the wire token `file:<sha256>.<ext>`. Identical
   /// content dedups onto the existing row (its last-accessed time is bumped;
   /// name/description/tags fill in only if they were empty).
@@ -412,12 +427,13 @@ class MediaArchive {
     if (db == null) return token;
     final now = DateTime.now().millisecondsSinceEpoch;
     try {
+      _writeBlob(key, data);
       final sha1b64 = _b64u(crypto.sha1.convert(data).bytes);
       db.execute(
         'INSERT OR IGNORE INTO media'
         '(sha256,sha1,tlsh,name,ext,description,tags,'
-        ' first_seen,last_seen,size,screenshot,data) '
-        'VALUES(?,?,NULL,?,?,?,?,?,?,?,NULL,?)',
+        ' first_seen,last_seen,size,screenshot) '
+        'VALUES(?,?,NULL,?,?,?,?,?,?,?,NULL)',
         // TODO(tlsh): compute when a Dart TLSH implementation is available.
         [
           key,
@@ -429,7 +445,6 @@ class MediaArchive {
           now,
           now,
           data.length,
-          data,
         ],
       );
       if (db.updatedRows == 0) {
@@ -475,13 +490,14 @@ class MediaArchive {
     final now = DateTime.now().millisecondsSinceEpoch;
     final rcv = receivedAtMs ?? now;
     try {
+      _writeBlob(key, data);
       final sha1b64 = _b64u(crypto.sha1.convert(data).bytes);
       db.execute(
         'INSERT OR IGNORE INTO media'
         '(sha256,sha1,tlsh,name,ext,description,tags,'
-        ' first_seen,last_seen,size,screenshot,data,pinned,hosted,origin_pub,tier,received_at) '
-        'VALUES(?,?,NULL,NULL,?,NULL,NULL,?,?,?,NULL,?,?,1,?,?,?)',
-        [key, sha1b64, e, now, now, data.length, data, pin ? 1 : 0,
+        ' first_seen,last_seen,size,screenshot,pinned,hosted,origin_pub,tier,received_at) '
+        'VALUES(?,?,NULL,NULL,?,NULL,NULL,?,?,?,NULL,?,1,?,?,?)',
+        [key, sha1b64, e, now, now, data.length, pin ? 1 : 0,
          originPubHex, tier, rcv],
       );
       if (db.updatedRows == 0) {
@@ -722,10 +738,12 @@ class MediaArchive {
     final db = _ensureDb();
     if (key == null || db == null) return null;
     try {
-      final rows = db.select('SELECT data FROM media WHERE sha256=?', [key]);
+      final rows = db.select('SELECT 1 FROM media WHERE sha256=?', [key]);
       if (rows.isEmpty) return null;
+      final bytes = blobRead(blobPathOf(key));
+      if (bytes == null) return null;
       touch(key);
-      return rows.first['data'] as Uint8List;
+      return bytes;
     } catch (e) {
       debugPrint('MediaArchive: get failed: $e');
       return null;
@@ -873,6 +891,7 @@ class MediaArchive {
     try {
       db.execute('DELETE FROM media WHERE sha256=?', [key]);
       db.execute('DELETE FROM media_fts WHERE sha256=?', [key]);
+      blobDelete(blobPathOf(key));
     } catch (e) {
       debugPrint('MediaArchive: delete failed: $e');
     }
@@ -1040,12 +1059,22 @@ class MediaArchive {
     if (db == null) return;
     try {
       final cutoff = DateTime.now().millisecondsSinceEpoch - maxAgeMs;
-      db.execute('DELETE FROM media WHERE last_seen < ?', [cutoff]);
-      db.execute(
-        'DELETE FROM media WHERE sha256 NOT IN '
-        '(SELECT sha256 FROM media ORDER BY last_seen DESC LIMIT ?)',
-        [maxCount],
-      );
+      // Row by row through [delete]: each row has a file and an index entry.
+      final gone = <String>{
+        for (final r in db.select(
+            'SELECT sha256 FROM media WHERE last_seen < ?', [cutoff]))
+          r['sha256'] as String,
+        for (final r in db.select(
+            'SELECT sha256 FROM media WHERE sha256 NOT IN '
+            '(SELECT sha256 FROM media ORDER BY last_seen DESC LIMIT ?)',
+            [maxCount]))
+          r['sha256'] as String,
+      };
+      db.transaction(() {
+        for (final k in gone) {
+          delete(k);
+        }
+      });
     } catch (e) {
       debugPrint('MediaArchive: prune failed: $e');
     }

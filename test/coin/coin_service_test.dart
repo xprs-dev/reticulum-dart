@@ -1,8 +1,5 @@
-import 'dart:ffi';
-import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqlite3/open.dart';
 
 import 'package:reticulum/src/services/coin/atm_chain.dart';
 import 'package:reticulum/src/services/coin/authority_log.dart';
@@ -14,12 +11,6 @@ import 'package:reticulum/src/services/coin/wallet.dart';
 import 'package:reticulum/src/util/nostr_crypto.dart';
 
 void main() {
-  setUpAll(() {
-    if (Platform.isLinux) {
-      open.overrideFor(
-          OperatingSystem.linux, () => DynamicLibrary.open('libsqlite3.so.0'));
-    }
-  });
 
   final admin = NostrCrypto.generateKeyPair();
   final coinId = admin.publicKeyHex;
