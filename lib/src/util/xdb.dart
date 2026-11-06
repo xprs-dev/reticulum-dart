@@ -43,27 +43,29 @@ class XDbException implements Exception {
 
 /// One row: a read-only map from column name to value, also indexable by
 /// column position (`row[0]`), as package:sqlite3's Row was.
-class XRow extends MapBase<String, Object?> {
+class XRow extends MapBase<String, dynamic> {
   XRow._(this._names, this._index, this._values);
   final List<String> _names;
   final Map<String, int> _index;
   final List<Object?> _values;
 
+  // dynamic, as package:sqlite3's Row was: a store reads `row['n'] as int`
+  // and `row['name']` into a String parameter without a cast each time.
   @override
-  Object? operator [](Object? key) {
+  dynamic operator [](Object? key) {
     if (key is int) return _values[key];
     final i = _index[key];
     return i == null ? null : _values[i];
   }
 
   /// The value of column [i].
-  Object? columnAt(int i) => _values[i];
+  dynamic columnAt(int i) => _values[i];
 
   @override
   Iterable<String> get keys => _names;
 
   @override
-  Iterable<Object?> get values => _values;
+  Iterable<dynamic> get values => _values;
 
   @override
   int get length => _names.length;
@@ -72,12 +74,12 @@ class XRow extends MapBase<String, Object?> {
   bool containsKey(Object? key) => _index.containsKey(key);
 
   @override
-  void operator []=(String key, Object? value) =>
+  void operator []=(String key, dynamic value) =>
       throw UnsupportedError('a row is read only');
   @override
   void clear() => throw UnsupportedError('a row is read only');
   @override
-  Object? remove(Object? key) => throw UnsupportedError('a row is read only');
+  dynamic remove(Object? key) => throw UnsupportedError('a row is read only');
 }
 
 /// The rows of a SELECT, in order; a list, as package:sqlite3's ResultSet.
