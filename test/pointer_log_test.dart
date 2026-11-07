@@ -1,5 +1,5 @@
 /*
- * The cursor an ESP32 can keep (aurora/docs/NOSTR.md, Indexer↔Indexer sync).
+ * The cursor an ESP32 can keep (aurora/docs/NOSTR.md, Archiver↔Archiver sync).
  *
  * The property under test is the one that quietly corrupts every naive
  * "sync since N" design: a cursor is only meaningful against the log it came
@@ -47,7 +47,7 @@ void main() {
     log.remove(_key(9), Uint8List.fromList(List.filled(64, 7)));
     final e = log.since(0).single;
     expect(e.isRemoval, isTrue,
-        reason: 'an indexer that never propagated removals would hand out dead '
+        reason: 'an archiver that never propagated removals would hand out dead '
             'addresses for ever');
   });
 
@@ -97,7 +97,7 @@ void main() {
     expect(snap.single.sha256, r2.sha256);
   });
 
-  test('an expired record never reaches a fresh indexer', () async {
+  test('an expired record never reaches a fresh archiver', () async {
     final log = PointerLog(epoch: 'e1');
     final old = await _rec(provider, 5, nowMs: 1000);
     log.add(old, nowMs: 1000);

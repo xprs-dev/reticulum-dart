@@ -1,8 +1,8 @@
 /*
  * RateRing — a fixed ring of hourly counters (aurora/docs/NOSTR.md, the
- * Indexer dashboard).
+ * Archiver dashboard).
  *
- * "Requests per hour" is the number that tells an Indexer's owner whether the
+ * "Requests per hour" is the number that tells an Archiver's owner whether the
  * offer is being used at all. Nothing in the stack kept it: counters were
  * lifetime totals, so a device up for a month showed a big number and no shape.
  * This is the shape: one bucket per hour, a bounded window, and a series a

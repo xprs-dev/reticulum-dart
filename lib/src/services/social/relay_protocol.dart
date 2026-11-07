@@ -38,10 +38,10 @@ class RelayOp {
   static const int drop = 0x05; // [5, reqPubHex, [ids], sigHex]
   static const int dropRes = 0x85; // [0x85, nDropped]
 
-  // ── Indexer↔Indexer pointer sync (docs/NOSTR.md) ─────────────────────────
+  // ── Archiver↔Archiver pointer sync (docs/NOSTR.md) ─────────────────────────
   //
-  // Indexers exchange ADDRESSES, never content. The records are signed by their
-  // providers, so a relaying indexer can neither forge nor resurrect a pointer,
+  // Archivers exchange ADDRESSES, never content. The records are signed by their
+  // providers, so a relaying archiver can neither forge nor resurrect a pointer,
   // and a receiver verifies everything end to end.
   //
   // "What changed since…" takes two cursors, and the POSITION one is normative:
@@ -155,7 +155,7 @@ class RelayProtocol {
 
   /// A bounded, resumable batch. [entries] are encoded ProviderRecords (inserts)
   /// or removals; [nextSeq] is where the asker resumes, and [more] says whether
-  /// there is still a backlog — a LoRa-attached indexer takes the same log in
+  /// there is still a backlog — a LoRa-attached archiver takes the same log in
   /// tiny bites over hours, and the cursor makes that free.
   static Uint8List syncRes({
     required String epoch,

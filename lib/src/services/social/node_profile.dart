@@ -1,9 +1,9 @@
 /*
  * What a node is made of (aurora/docs/NOSTR.md, "The physical profile").
  *
- * Every role — Publisher, Indexer, Archiver — is a promise about SOFTWARE.
+ * Every role — Publisher, Archiver, Archiver — is a promise about SOFTWARE.
  * Whether a node can keep that promise on the worst day of the year is a
- * question about power and antennas. A solar-powered Indexer on Starlink is
+ * question about power and antennas. A solar-powered Archiver on Starlink is
  * worth more than a hundred fibre boxes when the grid goes down, and the
  * network has to be able to know that BEFORE it needs it.
  *

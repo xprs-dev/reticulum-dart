@@ -82,7 +82,12 @@ class Ble5Bus {
   int _scanStartMs = 0;
   bool _wantScan = false;
   Timer? _scanWatchdog;
-  static const int _silenceRestartMs = 150 * 1000;
+  /// Thirty minutes, not 150 s. The native side (Ble5.kt) restarts a silent
+  /// scan on its own at 2, 4, 8 and 16 minutes and backs off from there;
+  /// this one at 150 s pre-empted it every three minutes in an empty room
+  /// for the life of the process, so that backoff never got past its first
+  /// step. This is the net under a native watchdog that died, nothing more.
+  static const int _silenceRestartMs = 30 * 60 * 1000;
 
   /// Optional log sink (the app wires this to its log service).
   void Function(String msg)? onLog;
@@ -213,6 +218,12 @@ class Ble5Bus {
   /// effective broadcast cap for the size router (≤ [maxFrame]). Valid after
   /// [supported] resolves true; conservative default before that.
   int get maxPayload => _maxPayload;
+
+  /// When the scan last delivered a frame carrying our marker, in ms since
+  /// the epoch; 0 before the first. The native scan is filtered on the
+  /// marker, so this is "when another XPRS radio was last heard", which is
+  /// what the app's PowerState reads to tell an empty room from a busy one.
+  int get lastFrameMs => _lastFrameMs;
 
   /// Route inbound frames of [subtype] to [handler]. One handler per subtype.
   void onFrame(int subtype, void Function(Ble5Frame) handler) =>
@@ -435,6 +446,20 @@ class Ble5Bus {
       await _method.invokeMethod('setScanMode', {'mode': mode});
     } catch (e) {
       onLog?.call('BLE5: setScanMode($mode) failed: $e');
+    }
+  }
+
+  /// The legacy connectable presence advert's mode: 0 LOW_POWER (about one
+  /// advert a second), 1 BALANCED, 2 LOW_LATENCY (about ten a second). The
+  /// advert stays connectable in every mode, so a peer that hears it can
+  /// still dial; LOW_POWER only makes it slower to be found. Changing it
+  /// restarts that advert, so callers change it rarely (the same dwell as
+  /// [setScanMode]).
+  Future<void> setPresenceMode(int mode) async {
+    try {
+      await _method.invokeMethod('setPresenceMode', {'mode': mode});
+    } catch (e) {
+      onLog?.call('BLE5: setPresenceMode($mode) failed: $e');
     }
   }
 

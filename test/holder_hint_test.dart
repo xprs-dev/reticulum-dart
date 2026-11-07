@@ -1,6 +1,6 @@
 /*
  * "These N devices have it" — and enough about each that the caller does not
- * have to guess (aurora/docs/NOSTR.md, "What an Indexer actually answers").
+ * have to guess (aurora/docs/NOSTR.md, "What an Archiver actually answers").
  *
  * The redundancy is the point. What is NOT the point is making a client pick
  * blind and burn somebody's cellular data on a coin flip.

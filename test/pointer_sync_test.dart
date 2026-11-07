@@ -1,8 +1,8 @@
 /*
- * Two indexers, one map (aurora/docs/NOSTR.md, Indexer↔Indexer sync).
+ * Two archivers, one map (aurora/docs/NOSTR.md, Archiver↔Archiver sync).
  *
  * The rule that makes gossip between them safe: the PROVIDER signs the record,
- * not the indexer handing it over. So we never have to trust the indexer we are
+ * not the archiver handing it over. So we never have to trust the archiver we are
  * talking to — only the maths. A hostile peer can waste our bandwidth; it cannot
  * put a lie in our map, resurrect a dead pointer, or point an address at itself.
  */
@@ -30,7 +30,7 @@ void main() {
         nowMs: nowMs,
       );
 
-  /// A second indexer's map.
+  /// A second archiver's map.
   ({
     PointerSyncClient client,
     Map<String, ProviderRecord> map,
@@ -77,7 +77,7 @@ void main() {
     log.add(await rec(provider, 7));
 
     final batch = server.answer('A1', 0)!;
-    // The hostile indexer rewrites the envelope to claim it is the provider.
+    // The hostile archiver rewrites the envelope to claim it is the provider.
     final tampered = [
       {
         ...batch.entries.first,
@@ -122,7 +122,7 @@ void main() {
     out = await b.client.merge('A1', batch.entries, batch.nextSeq, false);
     expect(out.removed, 1);
     expect(b.map, isEmpty,
-        reason: 'an indexer that never propagated removals hands out dead '
+        reason: 'an archiver that never propagated removals hands out dead '
             'addresses for ever');
   });
 
@@ -137,7 +137,7 @@ void main() {
     expect(server.answer('A2', 0), isNotNull);
   });
 
-  test('a big log comes in bites — the LoRa indexer case', () async {
+  test('a big log comes in bites — the LoRa archiver case', () async {
     final log = PointerLog(epoch: 'A1');
     final server = PointerSyncServer(log);
     for (var i = 0; i < 10; i++) {
@@ -160,7 +160,7 @@ void main() {
     expect(rounds, greaterThan(1), reason: 'it really was taken in bites');
   });
 
-  test('a snapshot brings a cold indexer up in one exchange', () async {
+  test('a snapshot brings a cold archiver up in one exchange', () async {
     final log = PointerLog(epoch: 'A1');
     final server = PointerSyncServer(log);
     final r1 = await rec(provider, 1);

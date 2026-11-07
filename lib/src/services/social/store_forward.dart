@@ -4,9 +4,9 @@
  * Two halves of the same idea:
  *  - SENDER side: when a 1:1 LXMF message can't be delivered directly (recipient
  *    offline / no path), hand the packed, already-signed message to a
- *    PROPAGATION NODE — an indexer advertising RelayCap.storeForward in the
+ *    PROPAGATION NODE — an archiver advertising RelayCap.storeForward in the
  *    RelayDirectory — which holds it (default 30-day TTL).
- *  - INDEXER side: when a recipient is seen online again (its LXMF delivery
+ *  - ARCHIVER side: when a recipient is seen online again (its LXMF delivery
  *    destination announces), flush the queued mail to it via the LxmfRouter and
  *    drop each message once delivered.
  *
@@ -38,7 +38,7 @@ class StoreForward {
   });
 
   /// Try to deliver [msg] directly; if that fails, deposit it at the best
-  /// available store-and-forward indexer for pickup when the recipient returns.
+  /// available store-and-forward archiver for pickup when the recipient returns.
   /// [recipientHint] (the recipient identity) lets us skip a hopeless direct
   /// attempt when we know there's no path — pass null to always try direct first.
   Future<SendOutcome> sendOrStore(
@@ -67,7 +67,7 @@ class StoreForward {
     return SendOutcome.failed;
   }
 
-  /// Indexer side: a recipient is believed online — deliver its queued mail.
+  /// Archiver side: a recipient is believed online — deliver its queued mail.
   /// Returns the number of messages delivered.
   Future<int> onRecipientOnline(RnsIdentity recipient) async {
     if (!node.hasMailFor(recipient)) return 0;
@@ -78,7 +78,7 @@ class StoreForward {
 
   RelayEntry? _pickPropagationNode() {
     final candidates = directory
-        .indexers()
+        .archivers()
         .where((e) => e.announcement.has(RelayCap.storeForward))
         .toList();
     if (candidates.isEmpty) return null;

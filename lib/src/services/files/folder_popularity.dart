@@ -9,7 +9,7 @@
  * are deleted — so a folder shared for years costs a handful of integer rows,
  * not a growing set of peer ids.
  *
- *   seeder  = a holder the Indexers report (its files-destination hash, stable
+ *   seeder  = a holder the Archivers report (its files-destination hash, stable
  *             across sessions) — sampled whenever the swarm is resolved.
  *   leecher = a peer that downloaded a file of this folder FROM US (its serve
  *             link id) — recorded at serve time. A session-unique proxy for a

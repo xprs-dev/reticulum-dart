@@ -129,37 +129,37 @@ Drive each node's JSON API (`/api/rns/*`; phone via `adb forward tcp:<local> tcp
 6. **Install path?** `POST /api/rns/folder/download {"folderId":…,"sha":…,"name":…}`
    → `{"ok":true}` fetched the bytes by hash over RNS.
 
-## Surviving the host going offline — indexer auto-mirror (Phase 3)
+## Surviving the host going offline — archiver auto-mirror (Phase 3)
 
 Phones are intermittent (sleep, 5-min battery announce cadence, network changes), so a
-folder hosted only on a phone vanishes when it sleeps. The fix is **always-on indexer
+folder hosted only on a phone vanishes when it sleeps. The fix is **always-on archiver
 nodes that mirror** the folders they see, so they keep answering after the owner drops:
 
 - **Self-nomination by capacity.** A node on mains power + Wi-Fi/Ethernet becomes a
-  `RelayRole.indexer` (relay_role.dart `RelayAnnouncement.forCapacity`, gated on
+  `RelayRole.archiver` (relay_role.dart `RelayAnnouncement.forCapacity`, gated on
   `profile.unlimited`). **A battery-less desktop/server counts as on-power** — the
   capacity governor treats `BatteryState.unknown`/no-battery as charging
   (capacity_governor.dart). Without that, an always-on desktop is misclassified as a
   leaf and never indexes. Leaf/battery nodes never mirror others' folders.
-- **Auto-mirror on browse.** When an indexer host resolves a folder
+- **Auto-mirror on browse.** When an archiver host resolves a folder
   (`RnsService.folderBrowseAsync`), it auto-subscribes (auto-sync) to it. `folderBrowseAsync`
   already caches the signed folder events locally and re-advertises this node as a folder
   **provider** (`FolderRelay.publish`).
 - **Background collation = the existing sync tick.** The 5-min `_autoSyncTimer` →
   `_autoSyncTick` (kept alive by the Android foreground service — reuse it, don't add a
-  service) fully mirrors each subscribed folder for an indexer host: it downloads every
+  service) fully mirrors each subscribed folder for an archiver host: it downloads every
   file (not just changed ones, via `folderDownloadFile`/`folderFetchBytes`), which stores
   the bytes and **re-publishes provider records** for each sha. The 30-min DHT republish
   keeps those records (and the folder-key record) alive.
 
-Net effect: once any always-on indexer has browsed a folder while the owner was up, it
+Net effect: once any always-on archiver has browsed a folder while the owner was up, it
 holds the whole directory **and** the bytes and advertises as a provider. When the owner
-sleeps, a consumer resolves the indexer by the folder key via the DHT (the same path used
+sleeps, a consumer resolves the archiver by the folder key via the DHT (the same path used
 to resolve the original host) and fetches from it. **Validated:** with the owner phone
-force-stopped, a desktop indexer (relayRole=indexer, `provided=15`) still served the full
-15-entry folder. Run two+ such indexers and there is no single point of failure (the
+force-stopped, a desktop archiver (relayRole=archiver, `provided=15`) still served the full
+15-entry folder. Run two+ such archivers and there is no single point of failure (the
 mirror is key-free and read-only — it cannot edit the folder; see
 [mutable-folders.md](mutable-folders.md)).
 
-For a folder that must ALWAYS be findable, ensure at least one always-on indexer has it in
+For a folder that must ALWAYS be findable, ensure at least one always-on archiver has it in
 its subscription set (it will, automatically, after browsing it once).

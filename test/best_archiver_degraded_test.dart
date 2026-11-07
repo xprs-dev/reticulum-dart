@@ -16,8 +16,8 @@ Future<RelayEntry> _entry(RelayDirectory dir, RelayAnnouncement a,
   return dir.byIdentity(id)!;
 }
 
-RelayAnnouncement _indexer(NodeProfile p) => RelayAnnouncement(
-      role: RelayRole.indexer,
+RelayAnnouncement _archiver(NodeProfile p) => RelayAnnouncement(
+      role: RelayRole.archiver,
       capacity: 3,
       caps: RelayCap.search | RelayCap.firehose | RelayCap.probe,
       wide: true,
@@ -31,7 +31,7 @@ void main() {
 
     final fibre = await _entry(
       dir,
-      _indexer(const NodeProfile(
+      _archiver(const NodeProfile(
         power: PowerSource.grid,
         poweredPct: 99,
         uplink: UplinkKind.fibre,
@@ -41,7 +41,7 @@ void main() {
 
     final solar = await _entry(
       dir,
-      _indexer(const NodeProfile(
+      _archiver(const NodeProfile(
         power: PowerSource.solarBattery,
         poweredPct: 96,
         uplink: UplinkKind.satellite,
@@ -55,11 +55,11 @@ void main() {
       )),
     );
 
-    final normal = dir.bestIndexer(mode: NetworkMode.normal);
+    final normal = dir.bestArchiver(mode: NetworkMode.normal);
     expect(normal!.idHex, fibre.idHex,
         reason: 'while the internet is up, fast and close wins');
 
-    final degraded = dir.bestIndexer(
+    final degraded = dir.bestArchiver(
       mode: NetworkMode.degraded,
       callerLinks: LinkFlag.lora,
     );
@@ -73,7 +73,7 @@ void main() {
     final dir = RelayDirectory();
     final e = await _entry(
       dir,
-      _indexer(const NodeProfile(
+      _archiver(const NodeProfile(
         power: PowerSource.solarBattery,
         uplink: UplinkKind.satellite,
         links: LinkFlag.lora | LinkFlag.packetRadio,
@@ -100,12 +100,12 @@ void main() {
       () async {
     final dir = RelayDirectory();
     final old = RelayAnnouncement(
-      role: RelayRole.indexer,
+      role: RelayRole.archiver,
       capacity: 2,
       caps: RelayCap.search,
     );
     final e = await _entry(dir, old);
     expect(e.announcement.profile.power, PowerSource.unknown);
-    expect(dir.bestIndexer(), isNotNull);
+    expect(dir.bestArchiver(), isNotNull);
   });
 }

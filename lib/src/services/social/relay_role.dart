@@ -2,13 +2,13 @@
  * RelayRole / RelayDirectory — the self-organizing layer of the distributed
  * relay (slice 3). Nodes ANNOUNCE what they are and what they hold; peers
  * collect those announcements into a directory and route each query to the
- * indexer most likely to answer it.
+ * archiver most likely to answer it.
  *
  * Role is derived from device capacity (capacity_policy.dart's CapacityProfile,
  * itself driven by capacity_governor.dart from battery + network): a node on
- * unlimited power+bandwidth becomes an INDEXER (search + firehose + store-and-
+ * unlimited power+bandwidth becomes an ARCHIVER (search + firehose + store-and-
  * forward; the very-high-capacity ones widen toward a full ARCHIVE); everything
- * else stays a LEAF (consumer + opportunistic light serving). Each indexer
+ * else stays a LEAF (consumer + opportunistic light serving). Each archiver
  * advertises an INTEREST SET — the topics/authors it aggregates — so the network
  * shards by interest instead of every node holding everything (the hybrid model).
  *
@@ -25,7 +25,7 @@ import '../files/dht/provider_record.dart'
     show kCapArchive, kCapHomeFiber, kCapUnknown;
 import 'node_profile.dart';
 
-enum RelayRole { leaf, indexer }
+enum RelayRole { leaf, archiver }
 
 /// Capability bit-flags advertised by a node (what it offers to the network).
 class RelayCap {
@@ -55,7 +55,7 @@ const int kMaxAnnouncedAuthors = 16;
 const int _kAuthorPrefixHexLen = 8; // 4 bytes of pubkey is enough to shard
 
 /// The topics/authors a node aggregates (its own interests + its community's).
-/// An indexer with [wide] holds everything it sees, ignoring the interest set.
+/// An archiver with [wide] holds everything it sees, ignoring the interest set.
 class InterestSet {
   final Set<String> topics = {};
   final Set<String> authors = {}; // full pubkey hex
@@ -112,11 +112,11 @@ class RelayAnnouncement {
   });
 
   bool has(int cap) => caps & cap != 0;
-  bool get isIndexer => role == RelayRole.indexer;
+  bool get isArchiver => role == RelayRole.archiver;
 
   /// Build the announcement for [profile] + [interests] using the standard
   /// capacity→role mapping. Topics/authors are taken from the interest set
-  /// (capped); a wide indexer advertises [RelayCap.archive].
+  /// (capped); a wide archiver advertises [RelayCap.archive].
   factory RelayAnnouncement.forCapacity(
       CapacityProfile profile, InterestSet interests,
       {String? pubkey, NodeProfile node = NodeProfile.unknown}) {
@@ -132,7 +132,7 @@ class RelayAnnouncement {
           pubkey: pubkey,
           profile: node);
     }
-    // Only unlimited (charger + WiFi/Ethernet) nodes take the indexer role.
+    // Only unlimited (charger + WiFi/Ethernet) nodes take the archiver role.
     if (!profile.unlimited) {
       return RelayAnnouncement(
           role: RelayRole.leaf,
@@ -156,7 +156,7 @@ class RelayAnnouncement {
     final wide = interests.wide || profile.capacity <= kCapHomeFiber;
     if (wide) caps |= RelayCap.archive;
     return RelayAnnouncement(
-      role: RelayRole.indexer,
+      role: RelayRole.archiver,
       capacity: profile.capacity,
       caps: caps,
       wide: wide,
@@ -212,7 +212,7 @@ class RelayAnnouncement {
           v is List ? [for (final e in v) e.toString()] : const [];
       return RelayAnnouncement(
         version: m['v'] is int ? m['v'] as int : 1,
-        role: r == RelayRole.indexer.index ? RelayRole.indexer : RelayRole.leaf,
+        role: r == RelayRole.archiver.index ? RelayRole.archiver : RelayRole.leaf,
         capacity: c,
         caps: m['f'] is int ? m['f'] as int : 0,
         wide: m['w'] == true,
@@ -227,7 +227,7 @@ class RelayAnnouncement {
     }
   }
 
-  /// Does this indexer EXPLICITLY list these topics / this author in its
+  /// Does this archiver EXPLICITLY list these topics / this author in its
   /// interest set (not merely via a wide/archive catch-all)? Used to prefer a
   /// specialist over a full archive when routing a query.
   bool explicitlyCovers({Iterable<String> topics = const [], String? author}) {
@@ -241,7 +241,7 @@ class RelayAnnouncement {
     return false;
   }
 
-  /// Would this advertised indexer hold an event with these topics/author?
+  /// Would this advertised archiver hold an event with these topics/author?
   bool wouldHold({Iterable<String> topics = const [], String? author}) =>
       wide ||
       has(RelayCap.archive) ||
@@ -261,7 +261,7 @@ class RelayEntry {
       identity.hash.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 }
 
-/// Collects relay announcements and picks the best indexer for a query.
+/// Collects relay announcements and picks the best archiver for a query.
 class RelayDirectory {
   RelayDirectory({this.entryTtl = const Duration(hours: 1), this.clock});
 
@@ -301,7 +301,7 @@ class RelayDirectory {
 
   /// The RNS identity of a peer that advertised [pubHex] as its own NOSTR key,
   /// so we can query its relay directly (e.g. to fetch its profile). Any role
-  /// (leaf or indexer) qualifies — every node answers for its own events.
+  /// (leaf or archiver) qualifies — every node answers for its own events.
   RnsIdentity? identityForPubkey(String pubHex) {
     _expire();
     final p = pubHex.toLowerCase();
@@ -311,7 +311,7 @@ class RelayDirectory {
     return null;
   }
 
-  /// Every currently-known relay peer (leaf or indexer), freshest first. Each
+  /// Every currently-known relay peer (leaf or archiver), freshest first. Each
   /// serves at least its own events, so all are worth querying for backfill.
   List<RelayEntry> entries() {
     _expire();
@@ -319,19 +319,19 @@ class RelayDirectory {
       ..sort((a, b) => b.lastSeenMs.compareTo(a.lastSeenMs));
   }
 
-  /// All currently-known indexers, freshest first.
-  List<RelayEntry> indexers() {
+  /// All currently-known archivers, freshest first.
+  List<RelayEntry> archivers() {
     _expire();
     final list = _entries.values
-        .where((e) => e.announcement.isIndexer)
+        .where((e) => e.announcement.isArchiver)
         .toList()
       ..sort((a, b) => b.lastSeenMs.compareTo(a.lastSeenMs));
     return list;
   }
 
-  /// Pick the best indexer to answer a query about [topic]/[author].
+  /// Pick the best archiver to answer a query about [topic]/[author].
   ///
-  /// Prefers an indexer whose interest set covers the query, then the physical
+  /// Prefers an archiver whose interest set covers the query, then the physical
   /// profile (node_profile.dart), then fewer hops and freshness.
   ///
   /// [mode] is what makes this design work. On a normal day the weights favour
@@ -341,14 +341,14 @@ class RelayDirectory {
   /// solar box with a LoRa antenna, unremarkable on a Tuesday, becomes the most
   /// valuable node on the network. The disaster case runs the SAME code; only
   /// the weights move.
-  RelayEntry? bestIndexer({
+  RelayEntry? bestArchiver({
     String? topic,
     String? author,
     NetworkMode mode = NetworkMode.normal,
     int callerLinks = 0,
     int? nowMs,
   }) {
-    final candidates = indexers();
+    final candidates = archivers();
     if (candidates.isEmpty) return null;
     final topics = topic == null ? const <String>[] : [topic];
     final now = nowMs ?? DateTime.now().millisecondsSinceEpoch;
@@ -406,22 +406,22 @@ class RelayRoleManager {
   String? selfPubkey;
 
   /// Live uptime (seconds since the RNS stack started), stamped into each
-  /// announce so peers can rank stable nodes (likely indexers) first when warm-
+  /// announce so peers can rank stable nodes (likely archivers) first when warm-
   /// starting discovery. Set by the wiring layer; null/0 means "not advertised".
   int Function()? uptimeProvider;
 
   /// The owner's explicit decision, which OVERRIDES the hardware inference.
   ///
-  /// The capacity rule (charger + a real uplink ⇒ indexer) is a good default and
+  /// The capacity rule (charger + a real uplink ⇒ archiver) is a good default and
   /// a bad only-option: the old phone in a drawer could never say "yes, use
   /// this", and the metered home line could never say "no, don't". So:
   ///
-  ///   'always' — serve as an indexer regardless of what the hardware says
+  ///   'always' — serve as an archiver regardless of what the hardware says
   ///   'off'    — never serve, whatever the charger says
   ///   'auto'   — the hardware decides (the default)
   ///
   /// Without this, picking "Always" changed a preference and nothing else: the
-  /// announce still said leaf, peers still filed us as a leaf, and no indexer
+  /// announce still said leaf, peers still filed us as a leaf, and no archiver
   /// ever synced with us.
   String volunteer = 'auto';
 

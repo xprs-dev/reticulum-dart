@@ -31,7 +31,7 @@ class DhtNode {
   final void Function(String msg)? log;
 
   /// Optional persistence anchors: a small, stable set of always-on holders
-  /// (e.g. the relay indexers) that we additionally STORE to and query FIRST on
+  /// (e.g. the relay archivers) that we additionally STORE to and query FIRST on
   /// resolve, regardless of XOR distance. Records thus survive churn of the
   /// ephemeral k-closest, and stay findable even when k is small — the XOR-walk
   /// becomes a fallback. Supplied by the owner (the DHT engine stays generic);
@@ -62,7 +62,7 @@ class DhtNode {
   final int maxRecordsPerKey;
 
   /// FIND_VALUE requests this node answered WITH RECORDS — the "is my offer
-  /// being used at all" number an Indexer's owner reads off the dashboard.
+  /// being used at all" number an Archiver's owner reads off the dashboard.
   /// Lifetime total; the host samples deltas into an hourly ring for the rate.
   int queriesAnswered = 0;
 
@@ -405,7 +405,7 @@ class DhtNode {
   }
 
   /// Accept a record into the local map WITHOUT it having come over an RPC —
-  /// the door an indexer sync comes through. It runs the same anti-abuse cap and
+  /// the door an archiver sync comes through. It runs the same anti-abuse cap and
   /// the same signature verify as a STORE, because a pointer handed to us by a
   /// peer deserves exactly as much trust as one shouted at us by a stranger:
   /// none.
@@ -469,7 +469,7 @@ class DhtNode {
   /// Preview first: a cleanup tool that cannot tell you what it is about to
   /// delete is not a tool, it is a gamble. Returns the records affected and, via
   /// [onRemoved], hands each real removal to the caller — who is expected to put
-  /// it in the pointer log so the deletion TRAVELS to synced indexers (a dead
+  /// it in the pointer log so the deletion TRAVELS to synced archivers (a dead
   /// address must propagate as surely as a new one).
   int sweepOlderThan(
     Duration age, {

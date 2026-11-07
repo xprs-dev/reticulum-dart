@@ -1,7 +1,7 @@
 /*
  * Locks the warm-start wire/contracts added for fast cold-start discovery:
  *   - the relay announcement carries a LIVE uptime that round-trips on the wire,
- *     so peers can rank stable nodes (likely indexers) first;
+ *     so peers can rank stable nodes (likely archivers) first;
  *   - FileTransferNode.seedPeers warm-loads the DHT routing table from cached
  *     public keys (the persisted observed-node cache feeds this on boot).
  */
@@ -14,11 +14,11 @@ void main() {
   group('relay announcement uptime', () {
     test('round-trips uptime on the wire', () {
       const ann = RelayAnnouncement(
-          role: RelayRole.indexer, capacity: kCapUnknown, caps: RelayCap.search);
+          role: RelayRole.archiver, capacity: kCapUnknown, caps: RelayCap.search);
       final decoded = RelayAnnouncement.decode(ann.encode(uptimeSeconds: 7200));
       expect(decoded, isNotNull);
       expect(decoded!.uptimeSeconds, 7200);
-      expect(decoded.role, RelayRole.indexer);
+      expect(decoded.role, RelayRole.archiver);
     });
 
     test('omits uptime when not advertised (0)', () {

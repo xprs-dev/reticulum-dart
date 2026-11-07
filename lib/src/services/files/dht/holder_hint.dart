@@ -1,8 +1,8 @@
 /*
- * What an Indexer says ABOUT each holder it hands back (aurora/docs/NOSTR.md,
- * "What an Indexer actually answers").
+ * What an Archiver says ABOUT each holder it hands back (aurora/docs/NOSTR.md,
+ * "What an Archiver actually answers").
  *
- * An Indexer never says "here is the file". It says "these N devices have it" —
+ * An Archiver never says "here is the file". It says "these N devices have it" —
  * and the redundancy is the point, not an accident. But a bare list of pubkeys
  * makes the client guess which one to call, and guessing wrong costs a wasted
  * link, a wasted transmission, or a stranger's cellular data.
@@ -11,7 +11,7 @@
  *
  *   lastHeardSec  a holder last seen three weeks ago is a lottery ticket; one
  *                 seen forty seconds ago is a phone call.
- *   provenance    "I heard this MYSELF" vs "another Indexer told me". After a
+ *   provenance    "I heard this MYSELF" vs "another Archiver told me". After a
  *                 sync, freshness is SECOND-HAND, and the age of the information
  *                 is not the age of the device. Both are reported, because a
  *                 client that cannot tell them apart will trust a rumour.
@@ -33,7 +33,7 @@ class HintSource {
   /// We heard the holder ourselves (it STOREd with us, or we saw its announce).
   static const int direct = 0;
 
-  /// Another Indexer told us during a sync. The age below is the age of the
+  /// Another Archiver told us during a sync. The age below is the age of the
   /// INFORMATION, not of the device.
   static const int synced = 1;
 }

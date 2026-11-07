@@ -1351,6 +1351,15 @@ class RnsTransport implements RnsInterfaceRegistry {
     final data = e.announceData;
     if (data == null) return;
     if (e.via == via) return;
+    // A leaf with the edge bridge lifts ITS RADIO NEIGHBOURS into the
+    // transport and nothing else (XPRS.md 12.12.3): it answers for a
+    // destination it heard on an edge bearer, never for one it learned from a
+    // hub. A phone on four hubs used to replay hub A's paths to hub B's
+    // askers, which is a transport node's work, on a battery.
+    if (edgeBridge && !edgeQuiet) {
+      final src = _ifaceByLabel(e.via);
+      if (src == null || !src.edge) return;
+    }
     if (e.hops >= kRnsMaxHops) return;
     final out = _ifaceByLabel(via);
     if (out == null) return;

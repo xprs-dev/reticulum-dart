@@ -169,7 +169,7 @@ class FileTransferNode {
   final int dhtK;
   final int dhtAlpha;
 
-  /// Persistence anchors: always-on holder identities (e.g. relay indexers) the
+  /// Persistence anchors: always-on holder identities (e.g. relay archivers) the
   /// DHT additionally STOREs to and queries first. Supplied by the host so the
   /// library stays free of app concepts; null/empty → classic Kademlia.
   final Iterable<RnsIdentity> Function()? stableAnchors;
