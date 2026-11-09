@@ -265,7 +265,9 @@ class MediaArchive {
     try {
       final parent = fileSystem.file(_dbPath).parent;
       if (!parent.existsSync()) parent.createSync(recursive: true);
-      final db = openDb(_dbPath);
+      // Compacted after a sweep (_deleteAll), not mid-write: it holds
+      // every file's bytes.
+      final db = openDb(_dbPath, autoCompact: false);
       db.execute('''
         CREATE TABLE IF NOT EXISTS media(
           sha256      TEXT PRIMARY KEY,

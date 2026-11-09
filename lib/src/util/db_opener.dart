@@ -19,13 +19,17 @@ export 'package:zx/zxdb.dart'
     show ZxSqlDb, ZxRow, ZxRows, ZxSqlDbStatement, ZxDbException, ZxDbError;
 
 /// Signature of a database opener: absolute path in, open handle out.
-typedef DbOpener = ZxSqlDb Function(String path, {bool durable});
+/// [autoCompact] false: the store compacts only when it calls
+/// `maybeCompact` (a store that can grow large, compacted where a pause
+/// costs nothing).
+typedef DbOpener = ZxSqlDb Function(String path,
+    {bool durable, bool autoCompact});
 
 /// Signature of an in-memory database opener.
 typedef DbMemoryOpener = ZxSqlDb Function();
 
-ZxSqlDb _plain(String path, {bool durable = false}) =>
-    ZxSqlDb.open(path, durable: durable);
+ZxSqlDb _plain(String path, {bool durable = false, bool autoCompact = true}) =>
+    ZxSqlDb.open(path, durable: durable, autoCompact: autoCompact);
 
 /// The opener every store uses; a host replaces it at boot.
 DbOpener dbOpener = _plain;
@@ -37,6 +41,8 @@ DbMemoryOpener dbMemoryOpener = ZxSqlDb.memory;
 /// [dbMemoryOpener] when [path] is `:memory:` (a zxdb file path has no such
 /// special name: without this a test's `:memory:` became a file in the
 /// working directory, shared by every test).
-ZxSqlDb openDb(String path, {bool durable = false}) => path == ':memory:'
-    ? dbMemoryOpener()
-    : dbOpener(path, durable: durable);
+ZxSqlDb openDb(String path,
+        {bool durable = false, bool autoCompact = true}) =>
+    path == ':memory:'
+        ? dbMemoryOpener()
+        : dbOpener(path, durable: durable, autoCompact: autoCompact);
