@@ -20,7 +20,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:sqlite3/common.dart';
+import 'package:crypto/crypto.dart' as crypto;
+import 'package:zx/zxdb.dart' show ZxSqlDbTextIndex;
 
 import '../../util/db_opener.dart';
 
@@ -91,31 +92,29 @@ class NostrFilter {
 class RelayEventStore {
   RelayEventStore._(this._db);
 
-  final CommonDatabase _db;
+  final ZxSqlDb _db;
 
   /// Open (or create) a relay event store at [path]. Use ':memory:' for tests.
-  /// Throws if SQLite cannot be opened — callers running on web should not call
-  /// this (sqlite3 needs dart:ffi).
-  /// [keyHex] applies a SQLCipher key (raw 32-byte hex) to the database — used
-  /// when this store lives inside an encrypted profile and is opened on an
-  /// isolate that cannot reach the host's keyed opener.
+  /// [keyHex] is the store's secret (64 hex characters) when it lives inside
+  /// an encrypted profile and is opened on an isolate that cannot reach the
+  /// host's keyed opener (XPRS core: storeSecretFor); the store is a zxdb
+  /// file encrypted with it.
   factory RelayEventStore.open(String path, {String? keyHex}) {
-    if (path != ':memory:') {
+    final ZxSqlDb db;
+    if (path == ':memory:') {
+      db = dbMemoryOpener();
+    } else {
       final parent = fileSystem.file(path).parent;
       if (!parent.existsSync()) parent.createSync(recursive: true);
+      db = keyHex != null && keyHex.isNotEmpty
+          ? ZxSqlDb.open(path, password: keyHex, scryptLog2N: 1, lockWaitMs: 4000)
+          : dbOpener(path);
     }
-    final db = dbOpener(path);
-    if (keyHex != null && keyHex.isNotEmpty) {
-      db.execute('PRAGMA key = "x\'$keyHex\'";');
-    }
-    db.execute('PRAGMA journal_mode = WAL;');
-    db.execute('PRAGMA synchronous = NORMAL;');
-    db.execute('PRAGMA foreign_keys = ON;');
     _migrate(db);
     return RelayEventStore._(db);
   }
 
-  static void _migrate(CommonDatabase db) {
+  static void _migrate(ZxSqlDb db) {
     // Canonical events. `raw` holds the verbatim NIP-01 JSON so we can return
     // byte-faithful events; the columns are the query surface.
     db.execute('''
@@ -126,7 +125,9 @@ class RelayEventStore {
         kind        INTEGER NOT NULL,
         content     TEXT NOT NULL,
         raw         TEXT NOT NULL,
-        deleted     INTEGER NOT NULL DEFAULT 0
+        deleted     INTEGER NOT NULL DEFAULT 0,
+        received_at INTEGER NOT NULL DEFAULT 0,
+        tier        INTEGER NOT NULL DEFAULT 2
       );
     ''');
     db.execute('CREATE INDEX IF NOT EXISTS idx_ev_author ON events(pubkey);');
@@ -142,10 +143,14 @@ class RelayEventStore {
         event_id TEXT NOT NULL,
         name     TEXT NOT NULL,
         value    TEXT NOT NULL,
-        FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE
+        vkey     TEXT NOT NULL
       );
     ''');
-    db.execute('CREATE INDEX IF NOT EXISTS idx_tag_nv ON tags(name, value);');
+    // vkey: the value, or a hash of it when long (_vk): the index of the
+    // name/value lookups (an index key is at most about 1 KB; a tag value,
+    // a URL or a quoted text, can be longer). Deleting an event deletes its
+    // tags in the same transaction (_deleteById).
+    db.execute('CREATE INDEX IF NOT EXISTS idx_tag_nv ON tags(name, vkey);');
     db.execute('CREATE INDEX IF NOT EXISTS idx_tag_ev ON tags(event_id);');
 
     // Reaction receipts: one row per (post, reactor). Kind-7 events are
@@ -162,14 +167,9 @@ class RelayEventStore {
       ) WITHOUT ROWID;
     ''');
 
-    // Full-text index: post content + a `meta` column holding searchable tag
-    // values (file names, topics, etc.). event_id is carried UNINDEXED so we can
-    // map matches back and delete on replace.
-    db.execute('''
-      CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(
-        content, meta, event_id UNINDEXED, tokenize = 'unicode61'
-      );
-    ''');
+    // Full-text search: the zx text index `events` (fields content and meta,
+    // the searchable tag values), kept in the same transaction as the rows
+    // (_fts).
 
     // Store-and-forward propagation mailbox (used by store_forward.dart, slice
     // 4). Created here so the relay DB has one schema. dest is the recipient's
@@ -186,20 +186,9 @@ class RelayEventStore {
     db.execute('CREATE INDEX IF NOT EXISTS idx_sf_dest ON sf_inbox(dest);');
     db.execute('CREATE INDEX IF NOT EXISTS idx_sf_exp ON sf_inbox(expires_at);');
 
-    // Store-and-forward hosting columns (added later; ALTER on existing DBs).
-    // received_at = when WE accepted the event (drives retention + monthly caps,
-    // distinct from the author's created_at). tier = 0 self / 1 followed /
-    // 2 stranger, for tier-aware quota + eviction.
-    final cols = {
-      for (final r in db.select('PRAGMA table_info(events)'))
-        r['name'] as String
-    };
-    if (!cols.contains('received_at')) {
-      db.execute('ALTER TABLE events ADD COLUMN received_at INTEGER NOT NULL DEFAULT 0;');
-    }
-    if (!cols.contains('tier')) {
-      db.execute('ALTER TABLE events ADD COLUMN tier INTEGER NOT NULL DEFAULT 2;');
-    }
+    // received_at = when WE accepted the event (drives retention + monthly
+    // caps, distinct from the author's created_at). tier = 0 self / 1
+    // followed / 2 stranger, for tier-aware quota + eviction.
     db.execute('CREATE INDEX IF NOT EXISTS idx_ev_tier ON events(tier, received_at);');
   }
 
@@ -257,25 +246,17 @@ class RelayEventStore {
   int putAllVerified(List<NostrEvent> events, {int tier = 2, int? receivedAtMs}) {
     if (events.isEmpty) return 0;
     var stored = 0;
-    // Collect during the tx, notify after COMMIT — never run hook code while
-    // sqlite holds the outer transaction.
+    // Collect during the transaction, notify after the commit: never run
+    // hook code while the store holds the writer lock.
     final storedEvents = <NostrEvent>[];
-    _db.execute('BEGIN');
-    _inTx = true;
-    try {
+    _db.transaction(() {
       for (final e in events) {
         if (_put(e, tier: tier, receivedAtMs: receivedAtMs, verify: false)) {
           stored++;
           storedEvents.add(e);
         }
       }
-      _db.execute('COMMIT');
-    } catch (_) {
-      _db.execute('ROLLBACK');
-      rethrow;
-    } finally {
-      _inTx = false;
-    }
+    });
     for (final e in storedEvents) {
       onPut?.call(e);
     }
@@ -312,12 +293,12 @@ class RelayEventStore {
     if (repl != null) {
       final existing = _db.select(
         'SELECT id, created_at FROM events WHERE pubkey = ? AND kind = ? '
-        '${repl.dTag != null ? "AND id IN (SELECT event_id FROM tags WHERE name='d' AND value = ?) " : ""}'
+        '${repl.dTag != null ? "AND id IN (SELECT event_id FROM tags WHERE name='d' AND vkey = ?) " : ""}'
         'ORDER BY created_at DESC LIMIT 1',
         [
           e.pubkey,
           e.kind,
-          if (repl.dTag != null) repl.dTag!,
+          if (repl.dTag != null) _vk(repl.dTag!),
         ],
       );
       if (existing.isNotEmpty) {
@@ -341,24 +322,16 @@ class RelayEventStore {
   int _pendingTier = 2;
   int _pendingReceivedSec = 0;
 
-  // True while putAllVerified holds an outer transaction: sqlite has no nested
-  // BEGIN, so _insert must not open its own.
-  bool _inTx = false;
+  /// The full-text index of the events (content, then tag values).
+  late final ZxSqlDbTextIndex _fts =
+      _db.textIndex('events', {'content': 1, 'meta': 1});
 
-  void _insert(NostrEvent e) {
-    if (_inTx) {
-      _insertRows(e);
-      return;
-    }
-    _db.execute('BEGIN');
-    try {
-      _insertRows(e);
-      _db.execute('COMMIT');
-    } catch (err) {
-      _db.execute('ROLLBACK');
-      rethrow;
-    }
-  }
+  /// A tag value's index key: itself, or `h:` and its SHA-256 when longer
+  /// than an index key may be.
+  static String _vk(String v) =>
+      v.length <= 200 ? v : 'h:${crypto.sha256.convert(utf8.encode(v))}';
+
+  void _insert(NostrEvent e) => _db.transaction(() => _insertRows(e));
 
   void _insertRows(NostrEvent e) {
     _db.execute(
@@ -370,24 +343,21 @@ class RelayEventStore {
     final metaParts = <String>[];
     for (final t in e.tags) {
       if (t.length < 2) continue;
-      _db.execute('INSERT INTO tags(event_id, name, value) VALUES(?,?,?)',
-          [e.id, t[0], t[1]]);
+      _db.execute('INSERT INTO tags(event_id, name, value, vkey) VALUES(?,?,?,?)',
+          [e.id, t[0], t[1], _vk(t[1])]);
       // Make tag values (file names, topics, mime, etc.) full-text searchable.
       for (final v in t.skip(1)) {
         if (v.isNotEmpty) metaParts.add(v);
       }
     }
-    _db.execute(
-      'INSERT INTO events_fts(content, meta, event_id) VALUES(?,?,?)',
-      [e.content, metaParts.join(' '), e.id],
-    );
+    _fts.put(e.id!, {'content': e.content, 'meta': metaParts.join(' ')});
   }
 
-  void _deleteById(String id) {
-    // tags cascade via FK; events_fts is contentless-external so delete by hand.
-    _db.execute('DELETE FROM events_fts WHERE event_id = ?', [id]);
-    _db.execute('DELETE FROM events WHERE id = ?', [id]);
-  }
+  void _deleteById(String id) => _db.transaction(() {
+        _fts.remove(id);
+        _db.execute('DELETE FROM tags WHERE event_id = ?', [id]);
+        _db.execute('DELETE FROM events WHERE id = ?', [id]);
+      });
 
   /// Moderator hard-delete of any single event by id, regardless of author.
   /// Intended for the relay operator (admin) to remove abusive content.
@@ -402,8 +372,8 @@ class RelayEventStore {
     final pub = recipientPubHex.toLowerCase();
     for (final id in ids) {
       final rows = _db.select(
-        "SELECT 1 FROM tags WHERE event_id = ? AND name = 'p' AND value = ? LIMIT 1",
-        [id, pub],
+        "SELECT 1 FROM tags WHERE event_id = ? AND name = 'p' AND vkey = ? LIMIT 1",
+        [id, _vk(pub)],
       );
       if (rows.isEmpty) continue;
       _deleteById(id);
@@ -422,7 +392,7 @@ class RelayEventStore {
           'UPDATE events SET deleted = 1 WHERE id = ? AND pubkey = ?',
           [t[1], del.pubkey],
         );
-        _db.execute('DELETE FROM events_fts WHERE event_id = ?', [t[1]]);
+        _fts.remove(t[1]);
       }
     }
   }
@@ -467,20 +437,37 @@ class RelayEventStore {
     return _rows(_db.select(sql, params));
   }
 
-  /// NIP-50 full-text search joined with the rest of the filter.
+  /// NIP-50 full-text search joined with the rest of the filter: the text
+  /// index ranks (BM25), the filter keeps the hits it allows, ties go to the
+  /// newer event.
   List<NostrEvent> _search(NostrFilter filter) {
-    final where = <String>['e.deleted = 0', 'events_fts MATCH ?'];
-    final params = <Object?>[_ftsQuery(filter.search!)];
-    _applyFilter(filter, where, params);
     final limit = filter.limit ?? 200;
-    // bm25() rank ascending = best first; tie-break by recency.
-    final sql = 'SELECT e.raw FROM events_fts '
-        'JOIN events e ON e.id = events_fts.event_id'
-        '${_tagJoin(filter)} '
-        'WHERE ${where.join(' AND ')} '
-        'ORDER BY bm25(events_fts), e.created_at DESC LIMIT ?';
-    params.add(limit);
-    return _rows(_db.select(sql, params));
+    final hits = _fts.search(_ftsQuery(filter.search!), limit: limit * 5 + 100);
+    if (hits.isEmpty) return const [];
+    final score = {for (final h in hits) h.key: h.score};
+    final out = <(double, int, String)>[];
+    const chunk = 400;
+    final ids = score.keys.toList();
+    for (var i = 0; i < ids.length; i += chunk) {
+      final part = ids.sublist(i, (i + chunk).clamp(0, ids.length));
+      final where = <String>['e.deleted = 0', 'e.id IN (${_marks(part.length)})'];
+      final params = <Object?>[...part];
+      _applyFilter(filter, where, params);
+      for (final r in _db.select(
+          'SELECT e.id, e.created_at, e.raw FROM events e '
+          'WHERE ${where.join(' AND ')}',
+          params)) {
+        out.add((score[r['id']]!, r['created_at'] as int, r['raw'] as String));
+      }
+    }
+    out.sort((a, b) {
+      final c = b.$1.compareTo(a.$1);
+      return c != 0 ? c : b.$2.compareTo(a.$2);
+    });
+    return [
+      for (final o in out.take(limit))
+        if (_fromRaw(o.$3) case final e?) e,
+    ];
   }
 
   /// Public NIP-50 search helper.
@@ -515,9 +502,9 @@ class RelayEventStore {
       for (final entry in f.tags!.entries) {
         if (entry.value.isEmpty) continue;
         where.add('EXISTS (SELECT 1 FROM tags t WHERE t.event_id = e.id '
-            'AND t.name = ? AND t.value IN (${_marks(entry.value.length)}))');
+            'AND t.name = ? AND t.vkey IN (${_marks(entry.value.length)}))');
         params.add(entry.key);
-        params.addAll(entry.value);
+        params.addAll(entry.value.map(_vk));
       }
     }
   }
@@ -616,8 +603,8 @@ class RelayEventStore {
       final rows = _db.select('''
         SELECT e.id AS id FROM tags t
         JOIN events e ON e.id = t.event_id AND e.kind = 1 AND e.deleted = 0
-        WHERE t.name = 'e' AND t.value = ? LIMIT ?
-      ''', [eventId, limit]);
+        WHERE t.name = 'e' AND t.vkey = ? LIMIT ?
+      ''', [_vk(eventId), limit]);
       return [for (final r in rows) r['id'] as String];
     } catch (_) {
       return const [];
@@ -844,7 +831,7 @@ class RelayEventStore {
 
   // ── helpers ───────────────────────────────────────────────────────────────
 
-  List<NostrEvent> _rows(ResultSet rs) =>
+  List<NostrEvent> _rows(ZxRows rs) =>
       [for (final r in rs) _fromRaw(r['raw'] as String)!];
 
   NostrEvent? _fromRaw(String raw) {

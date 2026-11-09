@@ -1,8 +1,6 @@
-import 'dart:ffi';
 
 import 'package:test/test.dart';
 import 'package:reticulum/src/services/files/folder_popularity.dart';
-import 'package:sqlite3/open.dart';
 
 // A fixed instant inside a month (day 15, noon UTC) so tests never touch a wall
 // clock. ym = year*100 + month.
@@ -11,8 +9,6 @@ int _ms(int year, int month) =>
 
 void main() {
   // CI/dev hosts often ship only the runtime .so.0, not the dev symlink.
-  open.overrideFor(
-      OperatingSystem.linux, () => DynamicLibrary.open('libsqlite3.so.0'));
 
   group('FolderPopularity', () {
     test('ymOf packs year and month', () {

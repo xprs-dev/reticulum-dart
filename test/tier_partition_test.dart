@@ -13,18 +13,9 @@
  * These tests are the proof, and they are written as an attacker would: flood,
  * and then assert that the flood deleted only other junk.
  */
-import 'dart:ffi';
-import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
-import 'package:sqlite3/open.dart';
-
-void _useSystemSqlite() {
-  if (!Platform.isLinux) return;
-  open.overrideFor(
-      OperatingSystem.linux, () => DynamicLibrary.open('libsqlite3.so.0'));
-}
 
 const _priv =
     '0001a3f19c8d2b4e6f70a3f19c8d2b4e6f70a3f19c8d2b4e6f701b2c00000001';
@@ -43,7 +34,6 @@ StoredItem _item(String id, Tier tier, int bytes,
 
 void main() {
   setUpAll(() {
-    _useSystemSqlite();
     _pub = NostrCrypto.derivePublicKey(_priv);
   });
 

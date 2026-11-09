@@ -11,7 +11,6 @@
  * the mint and ATM layers. coin_ec/bearer_token + sqlite3 + dart:io.
  */
 
-import 'package:sqlite3/common.dart';
 
 import '../../util/db_opener.dart';
 
@@ -23,7 +22,7 @@ class CoinWallet {
   CoinWallet._(this._dbPath);
 
   final String _dbPath; // ':memory:' = no disk
-  CommonDatabase? _db;
+  ZxSqlDb? _db;
   bool _failed = false;
 
   /// Open (creating the schema). Use ':memory:' for tests.
@@ -33,20 +32,18 @@ class CoinWallet {
     return w;
   }
 
-  CommonDatabase? _ensureDb() {
+  ZxSqlDb? _ensureDb() {
     if (_failed) return null;
     final existing = _db;
     if (existing != null) return existing;
     try {
-      final CommonDatabase db;
+      final ZxSqlDb db;
       if (_dbPath == ':memory:') {
         db = dbMemoryOpener();
       } else {
         final parent = fileSystem.file(_dbPath).parent;
         if (!parent.existsSync()) parent.createSync(recursive: true);
-        db = dbOpener(_dbPath);
-        db.execute('PRAGMA journal_mode = WAL;');
-        db.execute('PRAGMA synchronous = NORMAL;');
+        db = dbOpener(_dbPath, durable: true); // proofs are money
       }
       db.execute('''
         CREATE TABLE IF NOT EXISTS proofs(
@@ -161,7 +158,7 @@ class CoinWallet {
     return rows.isNotEmpty && rows.first['state'] == 'spent';
   }
 
-  Proof _rowToProof(Row r) => Proof.fromJson({
+  Proof _rowToProof(ZxRow r) => Proof.fromJson({
         'a': r['amount'],
         'id': r['keyset_id'],
         'secret': r['secret'],

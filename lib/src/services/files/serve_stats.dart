@@ -9,7 +9,6 @@
  *
  * Path-injectable (':memory:' for tests). Synchronous; headless.
  */
-import 'package:sqlite3/common.dart';
 
 import '../../util/db_opener.dart';
 
@@ -32,15 +31,13 @@ class FolderServeStats {
 }
 
 class ServeStats {
-  final CommonDatabase _db;
+  final ZxSqlDb _db;
   ServeStats._(this._db);
 
   static const int _msPerDay = 86400000;
 
   factory ServeStats.open(String path) {
-    final db = dbOpener(path);
-    db.execute('PRAGMA journal_mode = WAL;');
-    db.execute('PRAGMA synchronous = NORMAL;');
+    final db = openDb(path);
     db.execute('''
       CREATE TABLE IF NOT EXISTS serve_daily(
         sha TEXT NOT NULL,
@@ -55,21 +52,41 @@ class ServeStats {
 
   int _today(int nowMs) => nowMs ~/ _msPerDay;
 
+  /// Serves counted since the last commit, by (sha, day): a commit per
+  /// serve would cost a commit's bytes each, so they are added up here and
+  /// written together (every [flushEvery], before any read, at close).
+  final Map<(String, int), int> _pending = {};
+  int _lastFlushMs = 0;
+  static const int flushEvery = 30000;
+
   /// Record one serve of [sha] (hex) at [nowMs] (defaults handled by caller).
   void record(String sha, int nowMs) {
     if (sha.isEmpty) return;
+    _pending.update((sha, _today(nowMs)), (n) => n + 1, ifAbsent: () => 1);
+    if (nowMs - _lastFlushMs >= flushEvery) flush(nowMs);
+  }
+
+  /// Writes the counted serves in one transaction.
+  void flush([int? nowMs]) {
+    _lastFlushMs = nowMs ?? DateTime.now().millisecondsSinceEpoch;
+    if (_pending.isEmpty) return;
+    final work = Map.of(_pending);
+    _pending.clear();
     try {
-      _db.execute(
-        'INSERT INTO serve_daily(sha, day, n) VALUES(?,?,1) '
-        'ON CONFLICT(sha, day) DO UPDATE SET n = n + 1',
-        [sha, _today(nowMs)],
-      );
+      _db.transaction(() {
+        work.forEach((k, n) => _db.execute(
+              'INSERT INTO serve_daily(sha, day, n) VALUES(?,?,?) '
+              'ON CONFLICT(sha, day) DO UPDATE SET n = n + excluded.n',
+              [k.$1, k.$2, n],
+            ));
+      });
     } catch (_) {}
   }
 
   /// All-time serves of a single file.
   int countFor(String sha) {
     if (sha.isEmpty) return 0;
+    flush();
     try {
       final r = _db.select('SELECT SUM(n) AS s FROM serve_daily WHERE sha=?', [sha]);
       return (r.isEmpty ? null : r.first['s'] as int?) ?? 0;
@@ -83,6 +100,7 @@ class ServeStats {
   FolderServeStats forShas(List<String> shas, int nowMs, {int topN = 5}) {
     final uniq = <String>{for (final s in shas) if (s.isNotEmpty) s}.toList();
     if (uniq.isEmpty) return const FolderServeStats();
+    flush();
     final today = _today(nowMs);
     var total = 0, d1 = 0, d7 = 0, d30 = 0;
     final daySet = <int>{};
@@ -123,6 +141,7 @@ class ServeStats {
   }
 
   void close() {
+    flush();
     try {
       _db.dispose();
     } catch (_) {}

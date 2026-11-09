@@ -18,9 +18,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:isolate';
 
-import 'sqlite_library_override_stub.dart'
-    if (dart.library.io) 'sqlite_library_override_io.dart';
-
 import '../../util/nostr_crypto.dart';
 import '../../util/nostr_event.dart';
 import 'nostr_relay_hub.dart';
@@ -33,16 +30,8 @@ class _EngineInit {
   final String? persistPath;
   final String? selfPubHex;
 
-  /// Native SQLite library to load ON THIS ISOLATE, e.g. 'libsqlcipher.so'.
-  ///
-  /// package:sqlite3's loader override is PER-ISOLATE. A host that bundles
-  /// SQLCipher instead of stock SQLite (aurora does, for encrypted profiles)
-  /// sets its override on the main isolate — and the engine isolate then
-  /// tries to load a libsqlite3.so that is not in the app at all, throws, and
-  /// the whole NOSTR pipeline silently never starts.
-  final String? sqliteLibrary;
-
-  /// SQLCipher key (raw hex) for [storePath]. Null = plain database.
+  /// The zx store secret (hex) for [storePath] inside an encrypted profile
+  /// (RelayEventStore.open). Null = plain store.
   final String? dbKeyHex;
 
   const _EngineInit(
@@ -50,7 +39,6 @@ class _EngineInit {
     this.storePath,
     this.persistPath,
     this.selfPubHex, {
-    this.sqliteLibrary,
     this.dbKeyHex,
   });
 }
@@ -143,7 +131,6 @@ class NostrClient {
     required String storePath,
     String? persistPath,
     String? selfPubHex,
-    String? sqliteLibrary,
     String? dbKeyHex,
   }) async {
     final c = NostrClient._();
@@ -155,7 +142,6 @@ class NostrClient {
         storePath,
         persistPath,
         selfPubHex,
-        sqliteLibrary: sqliteLibrary,
         dbKeyHex: dbKeyHex,
       ),
       debugName: 'nostr-engine',
@@ -561,46 +547,46 @@ class NostrClient {
     // — closing a wss relay socket while a read event is already queued throws
     // "SocketException: Reading from a closed socket" from a dart:io timer, in
     // no stream we listen to, so no onError can catch it. Logged and survived.
-    runZonedGuarded(() {
-      // The sqlite3 loader override is per-isolate: re-apply the host's choice
-      // of native library here, BEFORE anything opens a database.
-      applySqliteLibraryOverride(init.sqliteLibrary);
-      // All store/relay setup runs on THIS (background) isolate.
-      final engine = _Engine(
-        init.toMain,
-        init.storePath,
-        init.persistPath,
-        init.selfPubHex,
-        dbKeyHex: init.dbKeyHex,
-      );
-      final rx = ReceivePort();
-      init.toMain.send(rx.sendPort);
-      rx.listen((dynamic m) {
-        if (m is Map) engine.handle(m.cast<String, dynamic>());
-      });
-    }, (e, st) {
-      // COALESCED, and that is not tidiness. This sent one port message to
-      // main per error, and the error above is one dart:io produces in a tight
-      // loop: measured on a phone, 800 identical lines in 56 ms -- about
-      // 14,000 messages a second, each one an allocation on main and a row in
-      // a log ring that has held 50 MB before now (docs/performance.md 3.3).
-      // The guard is meant to keep the isolate alive, not to hand the main
-      // isolate a denial of service; an error that repeats is one fact,
-      // however many times it happens.
-      final msg = 'nostr-engine: unhandled $e';
-      final now = DateTime.now().millisecondsSinceEpoch;
-      if (msg == _lastGuardMsg && now - _lastGuardMs < 5000) {
-        _guardRepeats++;
-        return;
-      }
-      final repeated = _guardRepeats;
-      _lastGuardMsg = msg;
-      _lastGuardMs = now;
-      _guardRepeats = 0;
-      init.toMain.send({
-        'log': repeated > 0 ? '$msg (x${repeated + 1} suppressed)' : msg,
-      });
-    });
+    runZonedGuarded(
+      () {
+        // All store/relay setup runs on THIS (background) isolate.
+        final engine = _Engine(
+          init.toMain,
+          init.storePath,
+          init.persistPath,
+          init.selfPubHex,
+          dbKeyHex: init.dbKeyHex,
+        );
+        final rx = ReceivePort();
+        init.toMain.send(rx.sendPort);
+        rx.listen((dynamic m) {
+          if (m is Map) engine.handle(m.cast<String, dynamic>());
+        });
+      },
+      (e, st) {
+        // COALESCED, and that is not tidiness. This sent one port message to
+        // main per error, and the error above is one dart:io produces in a tight
+        // loop: measured on a phone, 800 identical lines in 56 ms -- about
+        // 14,000 messages a second, each one an allocation on main and a row in
+        // a log ring that has held 50 MB before now (docs/performance.md 3.3).
+        // The guard is meant to keep the isolate alive, not to hand the main
+        // isolate a denial of service; an error that repeats is one fact,
+        // however many times it happens.
+        final msg = 'nostr-engine: unhandled $e';
+        final now = DateTime.now().millisecondsSinceEpoch;
+        if (msg == _lastGuardMsg && now - _lastGuardMs < 5000) {
+          _guardRepeats++;
+          return;
+        }
+        final repeated = _guardRepeats;
+        _lastGuardMsg = msg;
+        _lastGuardMs = now;
+        _guardRepeats = 0;
+        init.toMain.send({
+          'log': repeated > 0 ? '$msg (x${repeated + 1} suppressed)' : msg,
+        });
+      },
+    );
   }
 }
 
@@ -906,7 +892,8 @@ class _Engine {
     _tickEvery = want;
     _scheduleTick();
     toMain.send({
-      'log': 'NOSTR: engine tick -> ${want.inMilliseconds}ms '
+      'log':
+          'NOSTR: engine tick -> ${want.inMilliseconds}ms '
           '(${busy ? "frames arriving" : "no relay traffic for 30s"})',
     });
   }
@@ -924,8 +911,9 @@ class _Engine {
     final handoffNow = DateTime.now().millisecondsSinceEpoch;
     if (_handoffBatches > 0 && handoffNow - _handoffLogMs >= 60000) {
       toMain.send({
-        'log': 'engine->main: $_handoffEvents events in $_handoffBatches '
-            'batches (last ${(handoffNow - _handoffLogMs) ~/ 1000}s)'
+        'log':
+            'engine->main: $_handoffEvents events in $_handoffBatches '
+            'batches (last ${(handoffNow - _handoffLogMs) ~/ 1000}s)',
       });
       _handoffBatches = 0;
       _handoffEvents = 0;

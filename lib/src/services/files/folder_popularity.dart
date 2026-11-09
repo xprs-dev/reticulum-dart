@@ -18,7 +18,6 @@
  * Path-injectable (':memory:' for tests). Synchronous; headless. Time is passed
  * in (`nowMs`) so it is testable and never reaches for a wall clock itself.
  */
-import 'package:sqlite3/common.dart';
 
 import '../../util/db_opener.dart';
 
@@ -33,13 +32,11 @@ class PopMonth {
 }
 
 class FolderPopularity {
-  final CommonDatabase _db;
+  final ZxSqlDb _db;
   FolderPopularity._(this._db);
 
   factory FolderPopularity.open(String path) {
-    final db = dbOpener(path);
-    db.execute('PRAGMA journal_mode = WAL;');
-    db.execute('PRAGMA synchronous = NORMAL;');
+    final db = openDb(path);
     // The current-ish months' raw unique ids (deleted on rollover).
     db.execute('''
       CREATE TABLE IF NOT EXISTS pop_live(
@@ -91,15 +88,18 @@ class FolderPopularity {
   void sampleSeeders(String folder, Iterable<String> seederIds, int nowMs) {
     if (folder.isEmpty) return;
     final ym = ymOf(nowMs);
-    _rollover(folder, ym);
     try {
-      for (final id in seederIds) {
-        if (id.isEmpty) continue;
-        _db.execute(
-          'INSERT OR IGNORE INTO pop_live(folder, ym, kind, id) VALUES(?,?,0,?)',
-          [folder, ym, id],
-        );
-      }
+      // One commit for the rollover and the whole sample.
+      _db.transaction(() {
+        _rollover(folder, ym);
+        for (final id in seederIds) {
+          if (id.isEmpty) continue;
+          _db.execute(
+            'INSERT OR IGNORE INTO pop_live(folder, ym, kind, id) VALUES(?,?,0,?)',
+            [folder, ym, id],
+          );
+        }
+      });
     } catch (_) {}
   }
 
@@ -108,12 +108,14 @@ class FolderPopularity {
   void recordLeecher(String folder, String leecherId, int nowMs) {
     if (folder.isEmpty || leecherId.isEmpty) return;
     final ym = ymOf(nowMs);
-    _rollover(folder, ym);
     try {
-      _db.execute(
-        'INSERT OR IGNORE INTO pop_live(folder, ym, kind, id) VALUES(?,?,1,?)',
-        [folder, ym, leecherId],
-      );
+      _db.transaction(() {
+        _rollover(folder, ym);
+        _db.execute(
+          'INSERT OR IGNORE INTO pop_live(folder, ym, kind, id) VALUES(?,?,1,?)',
+          [folder, ym, leecherId],
+        );
+      });
     } catch (_) {}
   }
 

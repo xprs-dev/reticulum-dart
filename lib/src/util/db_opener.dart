@@ -1,40 +1,42 @@
-/// Injectable SQLite opener for every file-backed database this package
-/// creates (media archive, disk index, serve stats, relay event store,
-/// coin wallet).
+/// Injectable opener for every file-backed database this package creates
+/// (media archive, disk index, serve stats, relay event store, coin wallet):
+/// zxdb files (package:zx/zxdb.dart, `ZxSqlDb`).
 ///
 /// Host apps that encrypt their storage (XPRS's encrypted profiles) set
-/// [dbOpener] once at boot to an opener that applies the right SQLCipher
-/// key based on the database path. The default is a plain `sqlite3.open`
-/// on native targets, so nothing changes for hosts that don't inject.
+/// [dbOpener] once at boot to an opener that applies the right key for the
+/// database's path (XPRS core: `openStoreDb`). The default opens a plain
+/// file, the same on every platform: zxdb runs natively and in the browser
+/// (dart2wasm; the host persists its files there).
 ///
-/// Every store types its handle as [CommonDatabase] (package:sqlite3/common)
-/// rather than the FFI `Database`, because the browser build of the same
-/// package (package:sqlite3/wasm) returns a `CommonDatabase` backed by
-/// sqlite3.wasm over IndexedDB. The FFI half is only ever imported from
-/// `db_opener_io.dart`, which is what keeps `dart:ffi` out of the web build.
-/// A web host MUST inject both openers before any store is constructed; the
-/// web default throws so a forgotten injection is loud, not a plaintext or
-/// in-memory surprise.
-///
-/// In-memory databases go through [dbMemoryOpener] for the same reason.
+/// [durable] asks for a flush to the disk at every commit: for data whose
+/// loss on a power cut costs something that cannot be fetched again (the
+/// coin wallet's proofs). In-memory databases go through [dbMemoryOpener].
 library;
 
-import 'package:sqlite3/common.dart';
+import 'package:zx/zxdb.dart';
 
-import 'db_opener_stub.dart' if (dart.library.io) 'db_opener_io.dart'
-    as platform;
+export 'package:zx/zxdb.dart'
+    show ZxSqlDb, ZxRow, ZxRows, ZxSqlDbStatement, ZxDbException, ZxDbError;
 
 /// Signature of a database opener: absolute path in, open handle out.
-typedef DbOpener = CommonDatabase Function(String path);
+typedef DbOpener = ZxSqlDb Function(String path, {bool durable});
 
 /// Signature of an in-memory database opener.
-typedef DbMemoryOpener = CommonDatabase Function();
+typedef DbMemoryOpener = ZxSqlDb Function();
 
-/// The opener used by all file-backed stores in this package. Replace at
-/// boot, BEFORE any store is constructed; swapping it later does not rekey
-/// already-open handles.
-DbOpener dbOpener = platform.defaultDbOpener;
+ZxSqlDb _plain(String path, {bool durable = false}) =>
+    ZxSqlDb.open(path, durable: durable);
 
-/// The opener used for `:memory:` databases (tests, the coin wallet's
-/// in-memory mode).
-DbMemoryOpener dbMemoryOpener = platform.defaultDbMemoryOpener;
+/// The opener every store uses; a host replaces it at boot.
+DbOpener dbOpener = _plain;
+
+/// The in-memory opener.
+DbMemoryOpener dbMemoryOpener = ZxSqlDb.memory;
+
+/// Opens [path] with [dbOpener], or an in-memory database through
+/// [dbMemoryOpener] when [path] is `:memory:` (a zxdb file path has no such
+/// special name: without this a test's `:memory:` became a file in the
+/// working directory, shared by every test).
+ZxSqlDb openDb(String path, {bool durable = false}) => path == ':memory:'
+    ? dbMemoryOpener()
+    : dbOpener(path, durable: durable);

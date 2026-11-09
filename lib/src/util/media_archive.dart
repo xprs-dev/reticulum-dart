@@ -9,21 +9,25 @@
 // (reserved — no Dart implementation exists yet), the SHA-1, a reusable
 // preview screenshot, and a description.
 //
-// Backed by SQLite (same rationale as geo_chat_archive.dart): WAL-journalled
-// atomic writes, a crash can't shred the file, one corrupt row never costs
-// the archive. The screenshot and metadata live in their own columns so list
-// views / previews never have to read the (potentially large) data blob.
+// Backed by a zxdb file (media.zx, through dbOpener: encrypted inside an
+// encrypted profile). Tables:
+//   media       one row per held file: metadata only, no bytes
+//   media_part  the bytes, in [partSize] pieces keyed (sha256, n): a ranged
+//               read loads only the pieces it covers, and identical pieces
+//               share their pages (zx deduplicates whole overflow values)
+//   media_shot  the preview screenshot, apart from list views
+//   sources     where a hash can be obtained from
+// and the zx text index `media` (name, description, tags, folder, parent)
+// for local search. Every change to a file is one transaction.
 //
 // How media bytes travel between stations is OUT OF SCOPE here — the archive
 // only answers "do I have the bytes for this hash" locally.
-//
-// Native only — SQLite needs dart:ffi. Every call is a no-op on web (kIsWeb).
 
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
-import 'package:sqlite3/common.dart';
+import 'package:zx/zxdb.dart' show ZxSqlDbTextIndex;
 
 import 'db_opener.dart';
 
@@ -73,55 +77,55 @@ class HostedSweep {
   final String originPub;
 
   const HostedSweep.strangers()
-      : kind = SweepKind.strangers,
-        olderThanMs = 0,
-        freeBytes = 0,
-        originPub = '';
+    : kind = SweepKind.strangers,
+      olderThanMs = 0,
+      freeBytes = 0,
+      originPub = '';
 
   const HostedSweep.olderThan(this.olderThanMs)
-      : kind = SweepKind.olderThan,
-        freeBytes = 0,
-        originPub = '';
+    : kind = SweepKind.olderThan,
+      freeBytes = 0,
+      originPub = '';
 
   const HostedSweep.neverServed()
-      : kind = SweepKind.neverServed,
-        olderThanMs = 0,
-        freeBytes = 0,
-        originPub = '';
+    : kind = SweepKind.neverServed,
+      olderThanMs = 0,
+      freeBytes = 0,
+      originPub = '';
 
   const HostedSweep.byOrigin(this.originPub)
-      : kind = SweepKind.byOrigin,
-        olderThanMs = 0,
-        freeBytes = 0;
+    : kind = SweepKind.byOrigin,
+      olderThanMs = 0,
+      freeBytes = 0;
 
   const HostedSweep.freeBytes(this.freeBytes)
-      : kind = SweepKind.freeBytes,
-        olderThanMs = 0,
-        originPub = '';
+    : kind = SweepKind.freeBytes,
+      olderThanMs = 0,
+      originPub = '';
 
   const HostedSweep.all()
-      : kind = SweepKind.all,
-        olderThanMs = 0,
-        freeBytes = 0,
-        originPub = '';
+    : kind = SweepKind.all,
+      olderThanMs = 0,
+      freeBytes = 0,
+      originPub = '';
 }
 
 class MediaMeta {
-  final String sha256;       // unpadded base64url, 43 chars
-  final String? sha1;        // unpadded base64url, 27 chars
-  final String? tlsh;        // reserved: fuzzy hash, null until implemented
-  final String? name;        // original file name, when known
-  final String ext;          // lowercase extension (no dot)
+  final String sha256; // unpadded base64url, 43 chars
+  final String? sha1; // unpadded base64url, 27 chars
+  final String? tlsh; // reserved: fuzzy hash, null until implemented
+  final String? name; // original file name, when known
+  final String ext; // lowercase extension (no dot)
   final String? description;
   final List<String> tags;
-  final int firstSeenMs;     // epoch ms of first insertion
-  final int lastSeenMs;      // epoch ms of last access
-  final int size;            // byte length of the data blob
+  final int firstSeenMs; // epoch ms of first insertion
+  final int lastSeenMs; // epoch ms of last access
+  final int size; // byte length of the data blob
   final bool hasScreenshot;
-  final String? folder;      // virtual folder name (categorization)
-  final String? parent;      // virtual parent-folder name
-  final int downloads;       // times served to others (metric)
-  final bool pinned;         // locally added/authored — never auto-evicted
+  final String? folder; // virtual folder name (categorization)
+  final String? parent; // virtual parent-folder name
+  final int downloads; // times served to others (metric)
+  final bool pinned; // locally added/authored — never auto-evicted
 
   const MediaMeta({
     required this.sha256,
@@ -142,21 +146,21 @@ class MediaMeta {
   });
 
   Map<String, dynamic> toJson() => {
-        'sha256': sha256,
-        if (sha1 != null) 'sha1': sha1,
-        if (name != null) 'name': name,
-        'ext': ext,
-        if (description != null) 'description': description,
-        'tags': tags,
-        'firstSeen': firstSeenMs,
-        'lastSeen': lastSeenMs,
-        'size': size,
-        'hasScreenshot': hasScreenshot,
-        if (folder != null) 'folder': folder,
-        if (parent != null) 'parent': parent,
-        'downloads': downloads,
-        'pinned': pinned,
-      };
+    'sha256': sha256,
+    if (sha1 != null) 'sha1': sha1,
+    if (name != null) 'name': name,
+    'ext': ext,
+    if (description != null) 'description': description,
+    'tags': tags,
+    'firstSeen': firstSeenMs,
+    'lastSeen': lastSeenMs,
+    'size': size,
+    'hasScreenshot': hasScreenshot,
+    if (folder != null) 'folder': folder,
+    if (parent != null) 'parent': parent,
+    'downloads': downloads,
+    'pinned': pinned,
+  };
 }
 
 class MediaArchiveStats {
@@ -173,8 +177,11 @@ class MediaFolder {
   final int count;
   const MediaFolder(this.parent, this.folder, this.count);
 
-  Map<String, dynamic> toJson() =>
-      {'parent': parent, 'folder': folder, 'count': count};
+  Map<String, dynamic> toJson() => {
+    'parent': parent,
+    'folder': folder,
+    'count': count,
+  };
 }
 
 class MediaArchive {
@@ -200,42 +207,65 @@ class MediaArchive {
   /// the per-wapp dirs, e.g. `wappsDataStorage(prefs)`) so every wapp on the
   /// profile sees the same content-addressed store.
   static final Map<String, MediaArchive> _instances = {};
+
   /// Open (or reuse) the archive stored under [directory] (one SQLite file per
   /// directory). The directory is created on first write.
-  static MediaArchive forDirectory(String directory) =>
-      _instances.putIfAbsent(
-          directory, () => MediaArchive._('$directory/$_fileName'));
+  static MediaArchive forDirectory(String directory) => _instances.putIfAbsent(
+    directory,
+    () => MediaArchive._('$directory/$_fileName'),
+  );
 
-  static const String _fileName = 'media.sqlite3';
+  static const String _fileName = 'media.zx';
+
+  /// The size of one stored piece of a file (the last one is shorter).
+  static const int partSize = 256 << 10;
 
   final String _dbPath;
 
-  /// Where this archive's SQLite file lives. A caller that must move a large
-  /// blob (exporting a file so the OS can open it) opens this path on a WORKER
-  /// isolate and streams the row out, rather than pulling tens of MB through
-  /// [get] on the isolate that draws the UI.
+  /// Where this archive's zxdb file lives. A caller that must move a large
+  /// file (exporting it so the OS can open it) opens this path on a WORKER
+  /// isolate and copies the pieces out with [partsOf], rather than pulling
+  /// tens of MB through [get] on the isolate that draws the UI.
   String get dbPath => _dbPath;
+
+  /// The pieces of file [key] (a [storageKeyOf] key) in [db], an open
+  /// archive file, in order; nothing when it is not held. One piece at a
+  /// time is on the heap.
+  static Iterable<Uint8List> partsOf(ZxSqlDb db, String key) sync* {
+    final count =
+        db.select('SELECT COUNT(*) c FROM media_part WHERE sha256=?', [
+              key,
+            ]).first['c']
+            as int;
+    for (var n = 0; n < count; n++) {
+      final r = db.select(
+        'SELECT data FROM media_part WHERE sha256=? AND n=?',
+        [key, n],
+      );
+      if (r.isEmpty) return;
+      yield r.first['data'] as Uint8List;
+    }
+  }
 
   /// The storage key for a token / hex sha256 / b64u hash — the same
   /// normalisation [get] and [has] apply, exposed so an off-isolate reader can
   /// look a row up without duplicating the rules.
   static String? storageKeyOf(String tokenOrSha256) => _keyOf(tokenOrSha256);
 
-  CommonDatabase? _db;
+  ZxSqlDb? _db;
+  late ZxSqlDbTextIndex _fts; // set with _db
   bool _failed = false; // a fatal open error → operate degraded, never wipe
 
   // ── DB lifecycle ────────────────────────────────────────────────────────
 
-  CommonDatabase? _ensureDb() {
+  ZxSqlDb? _ensureDb() {
     if (_failed) return null;
     final existing = _db;
     if (existing != null) return existing;
     try {
       final parent = fileSystem.file(_dbPath).parent;
       if (!parent.existsSync()) parent.createSync(recursive: true);
-      final db = dbOpener(_dbPath);
-      db.execute('PRAGMA journal_mode = WAL;');
-      db.execute('PRAGMA synchronous = NORMAL;');
+      final db = openDb(_dbPath);
       db.execute('''
         CREATE TABLE IF NOT EXISTS media(
           sha256      TEXT PRIMARY KEY,
@@ -248,13 +278,48 @@ class MediaArchive {
           first_seen  INTEGER NOT NULL,
           last_seen   INTEGER NOT NULL,
           size        INTEGER NOT NULL,
-          screenshot  BLOB,
-          data        BLOB NOT NULL
+          shot        INTEGER NOT NULL DEFAULT 0,
+          folder      TEXT,
+          parent      TEXT,
+          downloads   INTEGER NOT NULL DEFAULT 0,
+          pinned      INTEGER NOT NULL DEFAULT 1,
+          hosted      INTEGER NOT NULL DEFAULT 0,
+          origin_pub  TEXT,
+          tier        INTEGER NOT NULL DEFAULT 0,
+          received_at INTEGER NOT NULL DEFAULT 0
         );
       ''');
+      // folder/parent drive virtual-folder navigation; downloads is the
+      // times-served-to-others metric; pinned protects locally added content
+      // from the storage-budget evictor. Store-and-forward hosting: hosted=1
+      // means we keep this file on behalf of others (a third-party deposit),
+      // origin_pub is the depositing peer's pubkey (hex), tier is 0 self /
+      // 1 followed / 2 stranger (tier-aware eviction), received_at is when we
+      // accepted it (ms). shot = 1 when media_shot holds a screenshot.
       db.execute('CREATE INDEX IF NOT EXISTS idx_media_ext ON media(ext);');
       db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_media_last ON media(last_seen);');
+        'CREATE INDEX IF NOT EXISTS idx_media_last ON media(last_seen);',
+      );
+      db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_media_hosted ON media(hosted, tier, received_at);',
+      );
+      db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_media_folder ON media(parent, folder);',
+      );
+      db.execute('''
+        CREATE TABLE IF NOT EXISTS media_part(
+          sha256 TEXT NOT NULL,
+          n      INTEGER NOT NULL,
+          data   BLOB NOT NULL,
+          PRIMARY KEY (sha256, n)
+        );
+      ''');
+      db.execute('''
+        CREATE TABLE IF NOT EXISTS media_shot(
+          sha256 TEXT PRIMARY KEY,
+          data   BLOB NOT NULL
+        );
+      ''');
       // Where a hash can be obtained from (XPRS section 16 / Files wapp): announced
       // torrent infohashes, Blossom server base URLs, callsigns claiming the
       // file. Kept even for hashes we don't hold, so we can answer/relay.
@@ -267,49 +332,13 @@ class MediaArchive {
           PRIMARY KEY (sha256, kind, value)
         );
       ''');
-      // Additive migrations (idempotent: ALTER throws if the column exists, so
-      // each is wrapped). folder/parent drive virtual-folder navigation;
-      // downloads is the times-served-to-others metric; pinned protects locally
-      // added content from the storage-budget evictor (pass 2).
-      for (final col in const [
-        'folder TEXT',
-        'parent TEXT',
-        'downloads INTEGER NOT NULL DEFAULT 0',
-        'pinned INTEGER NOT NULL DEFAULT 1',
-        // Store-and-forward hosting: hosted=1 means we keep this blob on behalf
-        // of others (a third-party deposit), 0 = our own/downloaded. origin_pub
-        // is the depositing peer's pubkey (hex); tier is 0 self / 1 followed /
-        // 2 stranger, driving tier-aware eviction. received_at = when we accepted
-        // the hosted blob (ms). Our own/downloaded media stays pinned=1.
-        'hosted INTEGER NOT NULL DEFAULT 0',
-        'origin_pub TEXT',
-        'tier INTEGER NOT NULL DEFAULT 0',
-        'received_at INTEGER NOT NULL DEFAULT 0',
-      ]) {
-        try {
-          db.execute('ALTER TABLE media ADD COLUMN $col;');
-        } catch (_) {/* column already present */}
-      }
-      db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_media_hosted ON media(hosted, tier, received_at);');
-      db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_media_folder ON media(parent, folder);');
-      // Full-text index for local search (works even when the RNS node is off).
-      db.execute('''
-        CREATE VIRTUAL TABLE IF NOT EXISTS media_fts USING fts5(
-          name, description, tags, folder, parent, sha256 UNINDEXED,
-          tokenize = 'unicode61'
-        );
-      ''');
-      // Backfill the FTS index if it was just created on an existing archive.
-      final ftsN =
-          (db.select('SELECT COUNT(*) c FROM media_fts').first['c'] as int);
-      final medN = (db.select('SELECT COUNT(*) c FROM media').first['c'] as int);
-      if (ftsN == 0 && medN > 0) {
-        for (final r in db.select('SELECT sha256 FROM media')) {
-          _syncFts(db, r['sha256'] as String);
-        }
-      }
+      _fts = db.textIndex('media', const {
+        'name': 1,
+        'description': 1,
+        'tags': 1,
+        'folder': 1,
+        'parent': 1,
+      });
       _db = db;
       return db;
     } catch (e) {
@@ -349,43 +378,38 @@ class MediaArchive {
 
   /// Max chars for a file description (host-enforced).
   static const int kMaxDescription = 250;
-  static String? _clampDesc(String? d) =>
-      d == null ? null : (d.length > kMaxDescription ? d.substring(0, kMaxDescription) : d);
+  static String? _clampDesc(String? d) => d == null
+      ? null
+      : (d.length > kMaxDescription ? d.substring(0, kMaxDescription) : d);
 
-  /// Rebuild the FTS row for [key] from the current media row.
-  void _syncFts(CommonDatabase db, String key) {
-    try {
-      db.execute('DELETE FROM media_fts WHERE sha256=?', [key]);
-      final rows = db.select(
-          'SELECT name,description,tags,folder,parent FROM media WHERE sha256=?',
-          [key]);
-      if (rows.isEmpty) return;
-      final r = rows.first;
-      var tagsText = '';
-      final rawTags = r['tags'];
-      if (rawTags is String && rawTags.isNotEmpty) {
-        try {
-          tagsText = (jsonDecode(rawTags) as List).join(' ');
-        } catch (_) {}
-      }
-      db.execute(
-        'INSERT INTO media_fts(name,description,tags,folder,parent,sha256) '
-        'VALUES(?,?,?,?,?,?)',
-        [
-          r['name'] ?? '',
-          r['description'] ?? '',
-          tagsText,
-          r['folder'] ?? '',
-          r['parent'] ?? '',
-          key,
-        ],
-      );
-    } catch (e) {
-      debugPrint('MediaArchive: fts sync failed: $e');
+  /// Rebuild the text-index document for [key] from its media row.
+  void _syncFts(ZxSqlDb db, String key) {
+    final rows = db.select(
+      'SELECT name,description,tags,folder,parent FROM media WHERE sha256=?',
+      [key],
+    );
+    if (rows.isEmpty) {
+      _fts.remove(key);
+      return;
     }
+    final r = rows.first;
+    var tagsText = '';
+    final rawTags = r['tags'];
+    if (rawTags is String && rawTags.isNotEmpty) {
+      try {
+        tagsText = (jsonDecode(rawTags) as List).join(' ');
+      } catch (_) {}
+    }
+    _fts.put(key, {
+      'name': r['name'] as String?,
+      'description': r['description'] as String?,
+      'tags': tagsText,
+      'folder': r['folder'] as String?,
+      'parent': r['parent'] as String?,
+    });
   }
 
-  /// Turn free text into a safe FTS5 MATCH expression (prefix on the last term).
+  /// Free text as a text-index query: every word, the last one a prefix.
   static String? _ftsMatch(String text) {
     final terms = text
         .toLowerCase()
@@ -393,9 +417,27 @@ class MediaArchive {
         .where((t) => t.isNotEmpty)
         .toList();
     if (terms.isEmpty) return null;
-    final quoted = [for (final t in terms) '"${t.replaceAll('"', '')}"'];
-    quoted[quoted.length - 1] = '${quoted.last}*';
-    return quoted.join(' ');
+    terms[terms.length - 1] = '${terms.last}*';
+    return terms.join(' ');
+  }
+
+  /// Stores [data] as the pieces of [key] (inside the caller's transaction).
+  static void _putParts(ZxSqlDb db, String key, Uint8List data) {
+    for (var n = 0, at = 0; at < data.length || n == 0; n++, at += partSize) {
+      final end = (at + partSize).clamp(0, data.length);
+      db.execute(
+        'INSERT OR REPLACE INTO media_part(sha256,n,data) VALUES(?,?,?)',
+        [key, n, Uint8List.sublistView(data, at, end)],
+      );
+    }
+  }
+
+  /// Removes every row of [key] (inside the caller's transaction).
+  void _deleteRows(ZxSqlDb db, String key) {
+    db.execute('DELETE FROM media WHERE sha256=?', [key]);
+    db.execute('DELETE FROM media_part WHERE sha256=?', [key]);
+    db.execute('DELETE FROM media_shot WHERE sha256=?', [key]);
+    _fts.remove(key);
   }
 
   // ── API ─────────────────────────────────────────────────────────────────
@@ -403,8 +445,13 @@ class MediaArchive {
   /// Store [data]; returns the wire token `file:<sha256>.<ext>`. Identical
   /// content dedups onto the existing row (its last-accessed time is bumped;
   /// name/description/tags fill in only if they were empty).
-  String putBytes(Uint8List data, String ext,
-      {String? name, String? description, List<String>? tags}) {
+  String putBytes(
+    Uint8List data,
+    String ext, {
+    String? name,
+    String? description,
+    List<String>? tags,
+  }) {
     final e = _normExt(ext);
     final key = _b64u(crypto.sha256.convert(data).bytes);
     final token = 'file:$key.$e';
@@ -413,35 +460,44 @@ class MediaArchive {
     final now = DateTime.now().millisecondsSinceEpoch;
     try {
       final sha1b64 = _b64u(crypto.sha1.convert(data).bytes);
-      db.execute(
-        'INSERT OR IGNORE INTO media'
-        '(sha256,sha1,tlsh,name,ext,description,tags,'
-        ' first_seen,last_seen,size,screenshot,data) '
-        'VALUES(?,?,NULL,?,?,?,?,?,?,?,NULL,?)',
-        // TODO(tlsh): compute when a Dart TLSH implementation is available.
-        [
-          key,
-          sha1b64,
-          name,
-          e,
-          _clampDesc(description),
-          tags == null ? null : jsonEncode(tags),
-          now,
-          now,
-          data.length,
-          data,
-        ],
-      );
-      if (db.updatedRows == 0) {
-        // Already archived: bump last_seen, backfill empty metadata.
+      db.transaction(() {
         db.execute(
-          'UPDATE media SET last_seen=?, '
-          'name=COALESCE(name,?), description=COALESCE(description,?), '
-          'tags=COALESCE(tags,?) WHERE sha256=?',
-          [now, name, _clampDesc(description), tags == null ? null : jsonEncode(tags), key],
+          'INSERT OR IGNORE INTO media'
+          '(sha256,sha1,tlsh,name,ext,description,tags,'
+          ' first_seen,last_seen,size) '
+          'VALUES(?,?,NULL,?,?,?,?,?,?,?)',
+          // TODO(tlsh): compute when a Dart TLSH implementation is available.
+          [
+            key,
+            sha1b64,
+            name,
+            e,
+            _clampDesc(description),
+            tags == null ? null : jsonEncode(tags),
+            now,
+            now,
+            data.length,
+          ],
         );
-      }
-      _syncFts(db, key);
+        if (db.updatedRows == 0) {
+          // Already archived: bump last_seen, backfill empty metadata.
+          db.execute(
+            'UPDATE media SET last_seen=?, '
+            'name=COALESCE(name,?), description=COALESCE(description,?), '
+            'tags=COALESCE(tags,?) WHERE sha256=?',
+            [
+              now,
+              name,
+              _clampDesc(description),
+              tags == null ? null : jsonEncode(tags),
+              key,
+            ],
+          );
+        } else {
+          _putParts(db, key, data);
+        }
+        _syncFts(db, key);
+      });
     } catch (e2) {
       debugPrint('MediaArchive: putBytes failed: $e2');
       return token;
@@ -462,11 +518,14 @@ class MediaArchive {
   /// on a profile): it stays hosted and served, but the eviction sweep will not
   /// consider it however tight the quota gets. Pinning is the only promise this
   /// archive makes that survives storage pressure, so it is opt-in per account.
-  String putHosted(Uint8List data, String ext,
-      {required String originPubHex,
-      required int tier,
-      int? receivedAtMs,
-      bool pin = false}) {
+  String putHosted(
+    Uint8List data,
+    String ext, {
+    required String originPubHex,
+    required int tier,
+    int? receivedAtMs,
+    bool pin = false,
+  }) {
     final e = _normExt(ext);
     final key = _b64u(crypto.sha256.convert(data).bytes);
     final token = 'file:$key.$e';
@@ -476,23 +535,37 @@ class MediaArchive {
     final rcv = receivedAtMs ?? now;
     try {
       final sha1b64 = _b64u(crypto.sha1.convert(data).bytes);
-      db.execute(
-        'INSERT OR IGNORE INTO media'
-        '(sha256,sha1,tlsh,name,ext,description,tags,'
-        ' first_seen,last_seen,size,screenshot,data,pinned,hosted,origin_pub,tier,received_at) '
-        'VALUES(?,?,NULL,NULL,?,NULL,NULL,?,?,?,NULL,?,?,1,?,?,?)',
-        [key, sha1b64, e, now, now, data.length, data, pin ? 1 : 0,
-         originPubHex, tier, rcv],
-      );
-      if (db.updatedRows == 0) {
-        // Already present: bump last_seen, and let a pin UPGRADE an existing row
-        // (the user turned "keep data" on after we already had the bytes).
-        db.execute('UPDATE media SET last_seen=? WHERE sha256=?', [now, key]);
-        if (pin) {
-          db.execute('UPDATE media SET pinned=1 WHERE sha256=?', [key]);
+      db.transaction(() {
+        db.execute(
+          'INSERT OR IGNORE INTO media'
+          '(sha256,sha1,tlsh,name,ext,description,tags,'
+          ' first_seen,last_seen,size,pinned,hosted,origin_pub,tier,received_at) '
+          'VALUES(?,?,NULL,NULL,?,NULL,NULL,?,?,?,?,1,?,?,?)',
+          [
+            key,
+            sha1b64,
+            e,
+            now,
+            now,
+            data.length,
+            pin ? 1 : 0,
+            originPubHex,
+            tier,
+            rcv,
+          ],
+        );
+        if (db.updatedRows > 0) {
+          _putParts(db, key, data);
+        } else {
+          // Already present: bump last_seen, and let a pin UPGRADE an existing row
+          // (the user turned "keep data" on after we already had the bytes).
+          db.execute('UPDATE media SET last_seen=? WHERE sha256=?', [now, key]);
+          if (pin) {
+            db.execute('UPDATE media SET pinned=1 WHERE sha256=?', [key]);
+          }
         }
-      }
-      _syncFts(db, key);
+        _syncFts(db, key);
+      });
     } catch (e2) {
       debugPrint('MediaArchive: putHosted failed: $e2');
       return token;
@@ -507,12 +580,20 @@ class MediaArchive {
     final db = _ensureDb();
     if (db == null) return (strangerBytes: 0, totalHostedBytes: 0);
     try {
-      final s = db.select(
-          'SELECT COALESCE(SUM(size),0) b FROM media WHERE hosted=1 AND tier=2')
-          .first['b'] as int;
-      final t = db.select(
-          'SELECT COALESCE(SUM(size),0) b FROM media WHERE hosted=1')
-          .first['b'] as int;
+      final s =
+          db
+                  .select(
+                    'SELECT COALESCE(SUM(size),0) b FROM media WHERE hosted=1 AND tier=2',
+                  )
+                  .first['b']
+              as int;
+      final t =
+          db
+                  .select(
+                    'SELECT COALESCE(SUM(size),0) b FROM media WHERE hosted=1',
+                  )
+                  .first['b']
+              as int;
       return (strangerBytes: s, totalHostedBytes: t);
     } catch (_) {
       return (strangerBytes: 0, totalHostedBytes: 0);
@@ -536,7 +617,8 @@ class MediaArchive {
     int pinnedItems,
     int oldestMs,
     int servedItems,
-  }) hostedStats() {
+  })
+  hostedStats() {
     final db = _ensureDb();
     const empty = (
       totalBytes: 0,
@@ -552,19 +634,21 @@ class MediaArchive {
     );
     if (db == null) return empty;
     try {
-      final r = db.select(
-        'SELECT '
-        ' COALESCE(SUM(size),0) tb, COUNT(*) ti,'
-        ' COALESCE(SUM(CASE WHEN tier=2 THEN size ELSE 0 END),0) sb,'
-        ' COALESCE(SUM(CASE WHEN tier=2 THEN 1 ELSE 0 END),0) si,'
-        ' COALESCE(SUM(CASE WHEN tier=1 THEN size ELSE 0 END),0) fb,'
-        ' COALESCE(SUM(CASE WHEN tier=1 THEN 1 ELSE 0 END),0) fi,'
-        ' COALESCE(SUM(CASE WHEN pinned=1 THEN size ELSE 0 END),0) pb,'
-        ' COALESCE(SUM(CASE WHEN pinned=1 THEN 1 ELSE 0 END),0) pi,'
-        ' COALESCE(MIN(received_at),0) oldest,'
-        ' COALESCE(SUM(CASE WHEN downloads>0 THEN 1 ELSE 0 END),0) served'
-        ' FROM media WHERE hosted=1',
-      ).first;
+      final r = db
+          .select(
+            'SELECT '
+            ' COALESCE(SUM(size),0) tb, COUNT(*) ti,'
+            ' COALESCE(SUM(CASE WHEN tier=2 THEN size ELSE 0 END),0) sb,'
+            ' COALESCE(SUM(CASE WHEN tier=2 THEN 1 ELSE 0 END),0) si,'
+            ' COALESCE(SUM(CASE WHEN tier=1 THEN size ELSE 0 END),0) fb,'
+            ' COALESCE(SUM(CASE WHEN tier=1 THEN 1 ELSE 0 END),0) fi,'
+            ' COALESCE(SUM(CASE WHEN pinned=1 THEN size ELSE 0 END),0) pb,'
+            ' COALESCE(SUM(CASE WHEN pinned=1 THEN 1 ELSE 0 END),0) pi,'
+            ' COALESCE(MIN(received_at),0) oldest,'
+            ' COALESCE(SUM(CASE WHEN downloads>0 THEN 1 ELSE 0 END),0) served'
+            ' FROM media WHERE hosted=1',
+          )
+          .first;
       return (
         totalBytes: (r['tb'] as int?) ?? 0,
         totalItems: (r['ti'] as int?) ?? 0,
@@ -602,7 +686,7 @@ class MediaArchive {
             originPub: (r['op'] as String?) ?? '',
             bytes: (r['b'] as int?) ?? 0,
             items: (r['n'] as int?) ?? 0,
-          )
+          ),
       ];
     } catch (_) {
       return const [];
@@ -661,28 +745,27 @@ class MediaArchive {
           'AND tier=2 ORDER BY received_at ASC',
         );
         var freed = 0;
-        var n = 0;
+        final drop = <String>[];
         for (final r in rows) {
           if (freed >= sweep.freeBytes) break;
           freed += (r['size'] as int?) ?? 0;
-          n++;
-          if (!dryRun) delete(r['sha256'] as String);
+          drop.add(r['sha256'] as String);
         }
-        return (bytes: freed, items: n);
+        if (!dryRun) _deleteAll(db, drop);
+        return (bytes: freed, items: drop.length);
       }
 
-      final agg = db.select(
-        'SELECT COALESCE(SUM(size),0) b, COUNT(*) n FROM media WHERE $where',
-        params,
-      ).first;
+      final agg = db
+          .select(
+            'SELECT COALESCE(SUM(size),0) b, COUNT(*) n FROM media WHERE $where',
+            params,
+          )
+          .first;
       final bytes = (agg['b'] as int?) ?? 0;
       final items = (agg['n'] as int?) ?? 0;
       if (!dryRun && items > 0) {
-        final rows =
-            db.select('SELECT sha256 FROM media WHERE $where', params);
-        for (final r in rows) {
-          delete(r['sha256'] as String);
-        }
+        final rows = db.select('SELECT sha256 FROM media WHERE $where', params);
+        _deleteAll(db, [for (final r in rows) r['sha256'] as String]);
       }
       return (bytes: bytes, items: items);
     } catch (_) {
@@ -692,15 +775,17 @@ class MediaArchive {
 
   /// Inventory of hosted blobs for the eviction planner: each is media (a blob),
   /// with its tier, size and accept time. Our own media (hosted=0) is never here.
-  List<({String sha, int tier, int bytes, int receivedAtMs})> hostedInventory() {
+  List<({String sha, int tier, int bytes, int receivedAtMs})>
+  hostedInventory() {
     final db = _ensureDb();
     if (db == null) return const [];
     try {
       // pinned=0 only: a pinned blob is one the user asked this device to keep,
       // and handing it to the evictor would break exactly that promise.
       final rows = db.select(
-          'SELECT sha256, tier, size, received_at FROM media '
-          'WHERE hosted=1 AND pinned=0');
+        'SELECT sha256, tier, size, received_at FROM media '
+        'WHERE hosted=1 AND pinned=0',
+      );
       return [
         for (final r in rows)
           (
@@ -708,7 +793,7 @@ class MediaArchive {
             tier: (r['tier'] as int?) ?? 2,
             bytes: (r['size'] as int?) ?? 0,
             receivedAtMs: (r['received_at'] as int?) ?? 0,
-          )
+          ),
       ];
     } catch (_) {
       return const [];
@@ -722,10 +807,15 @@ class MediaArchive {
     final db = _ensureDb();
     if (key == null || db == null) return null;
     try {
-      final rows = db.select('SELECT data FROM media WHERE sha256=?', [key]);
-      if (rows.isEmpty) return null;
+      final size = sizeOf(key);
+      if (size == null) return null;
+      final out = BytesBuilder(copy: false);
+      for (final part in partsOf(db, key)) {
+        out.add(part);
+      }
+      if (out.length != size) return null; // a damaged entry
       touch(key);
-      return rows.first['data'] as Uint8List;
+      return out.takeBytes();
     } catch (e) {
       debugPrint('MediaArchive: get failed: $e');
       return null;
@@ -748,9 +838,9 @@ class MediaArchive {
     }
   }
 
-  /// Bytes `[offset, offset+length)` of a held entry, sliced by SQLite
-  /// (`substr` on a BLOB reads only the pages it needs), so serving one piece
-  /// of a 16 MB file does not put 16 MB on the heap (docs/performance.md 8.9).
+  /// Bytes `[offset, offset+length)` of a held entry, read from the pieces
+  /// it covers only, so serving one piece of a 16 MB file does not put 16 MB
+  /// on the heap (docs/performance.md 8.9).
   /// Null when absent or [offset] is past the end. Not counted as an access:
   /// a swarm asking for 256 pieces is one fetch, not 256.
   Uint8List? readRange(String tokenOrSha256, int offset, int length) {
@@ -758,12 +848,22 @@ class MediaArchive {
     final db = _ensureDb();
     if (key == null || db == null || offset < 0 || length <= 0) return null;
     try {
-      final rows = db.select(
-          'SELECT substr(data, ?, ?) AS part, size FROM media WHERE sha256=?',
-          [offset + 1, length, key]);
-      if (rows.isEmpty) return null;
-      if (offset >= (rows.first['size'] as int)) return null;
-      return rows.first['part'] as Uint8List;
+      final size = sizeOf(key);
+      if (size == null || offset >= size) return null;
+      final end = (offset + length).clamp(0, size);
+      final out = BytesBuilder(copy: false);
+      for (final r in db.select(
+        'SELECT n, data FROM media_part WHERE sha256=? AND n>=? AND n<=? '
+        'ORDER BY n',
+        [key, offset ~/ partSize, (end - 1) ~/ partSize],
+      )) {
+        final base = (r['n'] as int) * partSize;
+        final data = r['data'] as Uint8List;
+        final from = (offset - base).clamp(0, data.length);
+        final to = (end - base).clamp(0, data.length);
+        if (to > from) out.add(Uint8List.sublistView(data, from, to));
+      }
+      return out.takeBytes();
     } catch (e) {
       debugPrint('MediaArchive: readRange failed: $e');
       return null;
@@ -777,8 +877,10 @@ class MediaArchive {
     final db = _ensureDb();
     if (key == null || db == null) return;
     try {
-      db.execute('UPDATE media SET last_seen=? WHERE sha256=?',
-          [DateTime.now().millisecondsSinceEpoch, key]);
+      db.execute('UPDATE media SET last_seen=? WHERE sha256=?', [
+        DateTime.now().millisecondsSinceEpoch,
+        key,
+      ]);
     } catch (e) {
       debugPrint('MediaArchive: touch failed: $e');
     }
@@ -790,8 +892,7 @@ class MediaArchive {
     final db = _ensureDb();
     if (key == null || db == null) return false;
     try {
-      return db
-          .select('SELECT 1 FROM media WHERE sha256=?', [key]).isNotEmpty;
+      return db.select('SELECT 1 FROM media WHERE sha256=?', [key]).isNotEmpty;
     } catch (_) {
       return false;
     }
@@ -804,11 +905,12 @@ class MediaArchive {
     if (key == null || db == null) return null;
     try {
       final rows = db.select(
-          'SELECT sha256,sha1,tlsh,name,ext,description,tags,first_seen,'
-          'last_seen,size,folder,parent,downloads,pinned,'
-          '(screenshot IS NOT NULL) AS has_shot '
-          'FROM media WHERE sha256=?',
-          [key]);
+        'SELECT sha256,sha1,tlsh,name,ext,description,tags,first_seen,'
+        'last_seen,size,folder,parent,downloads,pinned,'
+        'shot AS has_shot '
+        'FROM media WHERE sha256=?',
+        [key],
+      );
       if (rows.isEmpty) return null;
       final r = rows.first;
       List<String> tags = const [];
@@ -844,31 +946,35 @@ class MediaArchive {
   /// Update mutable metadata; null arguments leave the column unchanged.
   /// [description] is clamped to [kMaxDescription] chars. [folder]/[parent]
   /// drive the virtual-folder navigation. The FTS index is kept in sync.
-  void updateMeta(String tokenOrSha256,
-      {String? name,
-      String? description,
-      List<String>? tags,
-      String? folder,
-      String? parent}) {
+  void updateMeta(
+    String tokenOrSha256, {
+    String? name,
+    String? description,
+    List<String>? tags,
+    String? folder,
+    String? parent,
+  }) {
     final key = _keyOf(tokenOrSha256);
     final db = _ensureDb();
     if (key == null || db == null) return;
     try {
-      db.execute(
-        'UPDATE media SET name=COALESCE(?,name), '
-        'description=COALESCE(?,description), tags=COALESCE(?,tags), '
-        'folder=COALESCE(?,folder), parent=COALESCE(?,parent) '
-        'WHERE sha256=?',
-        [
-          name,
-          _clampDesc(description),
-          tags == null ? null : jsonEncode(tags),
-          folder,
-          parent,
-          key,
-        ],
-      );
-      _syncFts(db, key);
+      db.transaction(() {
+        db.execute(
+          'UPDATE media SET name=COALESCE(?,name), '
+          'description=COALESCE(?,description), tags=COALESCE(?,tags), '
+          'folder=COALESCE(?,folder), parent=COALESCE(?,parent) '
+          'WHERE sha256=?',
+          [
+            name,
+            _clampDesc(description),
+            tags == null ? null : jsonEncode(tags),
+            folder,
+            parent,
+            key,
+          ],
+        );
+        _syncFts(db, key);
+      });
     } catch (e) {
       debugPrint('MediaArchive: updateMeta failed: $e');
     }
@@ -880,8 +986,14 @@ class MediaArchive {
     final db = _ensureDb();
     if (key == null || db == null) return;
     try {
-      db.execute('UPDATE media SET screenshot=? WHERE sha256=?',
-          [screenshot, key]);
+      db.transaction(() {
+        if (!has(key)) return;
+        db.execute(
+          'INSERT OR REPLACE INTO media_shot(sha256,data) VALUES(?,?)',
+          [key, screenshot],
+        );
+        db.execute('UPDATE media SET shot=1 WHERE sha256=?', [key]);
+      });
     } catch (e) {
       debugPrint('MediaArchive: setScreenshot failed: $e');
     }
@@ -893,10 +1005,11 @@ class MediaArchive {
     final db = _ensureDb();
     if (key == null || db == null) return null;
     try {
-      final rows =
-          db.select('SELECT screenshot FROM media WHERE sha256=?', [key]);
+      final rows = db.select('SELECT data FROM media_shot WHERE sha256=?', [
+        key,
+      ]);
       if (rows.isEmpty) return null;
-      return rows.first['screenshot'] as Uint8List?;
+      return rows.first['data'] as Uint8List?;
     } catch (e) {
       debugPrint('MediaArchive: getScreenshot failed: $e');
       return null;
@@ -909,10 +1022,25 @@ class MediaArchive {
     final db = _ensureDb();
     if (key == null || db == null) return;
     try {
-      db.execute('DELETE FROM media WHERE sha256=?', [key]);
-      db.execute('DELETE FROM media_fts WHERE sha256=?', [key]);
+      db.transaction(() => _deleteRows(db, key));
     } catch (e) {
       debugPrint('MediaArchive: delete failed: $e');
+    }
+  }
+
+  /// Removes [keys] in one transaction, then compacts the file when the
+  /// removed bytes made it worth it.
+  void _deleteAll(ZxSqlDb db, List<String> keys) {
+    if (keys.isEmpty) return;
+    db.transaction(() {
+      for (final k in keys) {
+        _deleteRows(db, k);
+      }
+    });
+    try {
+      db.maybeCompact();
+    } catch (e) {
+      debugPrint('MediaArchive: compaction failed: $e');
     }
   }
 
@@ -923,11 +1051,10 @@ class MediaArchive {
     if (db == null) return const [];
     try {
       final rows = db.select(
-          'SELECT sha256 FROM media ORDER BY last_seen DESC LIMIT ? OFFSET ?',
-          [limit, offset]);
-      return [
-        for (final r in rows) ?getMeta(r['sha256'] as String),
-      ];
+        'SELECT sha256 FROM media ORDER BY last_seen DESC LIMIT ? OFFSET ?',
+        [limit, offset],
+      );
+      return [for (final r in rows) ?getMeta(r['sha256'] as String)];
     } catch (e) {
       debugPrint('MediaArchive: list failed: $e');
       return const [];
@@ -935,21 +1062,23 @@ class MediaArchive {
   }
 
   /// Full-text search over name/description/tags/folder/parent (local index).
-  /// Best matches first (bm25), then most-recently accessed.
+  /// Best matches first (BM25), then most-recently accessed.
   List<MediaMeta> search(String query, {int limit = 50}) {
     final db = _ensureDb();
     if (db == null) return const [];
     final q = _ftsMatch(query);
     if (q == null) return const [];
     try {
-      final rows = db.select(
-        'SELECT m.sha256 FROM media_fts '
-        'JOIN media m ON m.sha256 = media_fts.sha256 '
-        'WHERE media_fts MATCH ? '
-        'ORDER BY bm25(media_fts), m.last_seen DESC LIMIT ?',
-        [q, limit],
-      );
-      return [for (final r in rows) ?getMeta(r['sha256'] as String)];
+      final hits = _fts.search(q, limit: limit * 4 + 50);
+      final metas =
+          [
+            for (final h in hits)
+              if (getMeta(h.key) case final m?) (h.score, m),
+          ]..sort((a, b) {
+            final c = b.$1.compareTo(a.$1);
+            return c != 0 ? c : b.$2.lastSeenMs.compareTo(a.$2.lastSeenMs);
+          });
+      return [for (final m in metas.take(limit)) m.$2];
     } catch (e) {
       debugPrint('MediaArchive: search failed: $e');
       return const [];
@@ -966,8 +1095,9 @@ class MediaArchive {
     final db = _ensureDb();
     if (key == null || db == null) return;
     try {
-      db.execute(
-          'UPDATE media SET downloads = downloads + 1 WHERE sha256=?', [key]);
+      db.execute('UPDATE media SET downloads = downloads + 1 WHERE sha256=?', [
+        key,
+      ]);
     } catch (e) {
       debugPrint('MediaArchive: incrementDownloads failed: $e');
     }
@@ -985,7 +1115,7 @@ class MediaArchive {
       );
       return [
         for (final r in rows)
-          MediaFolder(r['p'] as String, r['f'] as String, r['c'] as int)
+          MediaFolder(r['p'] as String, r['f'] as String, r['c'] as int),
       ];
     } catch (e) {
       debugPrint('MediaArchive: folders failed: $e');
@@ -995,8 +1125,12 @@ class MediaArchive {
 
   /// Files in a given virtual (parent, folder), most recently accessed first.
   /// Pass empty strings for the uncategorized bucket.
-  List<MediaMeta> listByFolder(String parent, String folder,
-      {int offset = 0, int limit = 200}) {
+  List<MediaMeta> listByFolder(
+    String parent,
+    String folder, {
+    int offset = 0,
+    int limit = 200,
+  }) {
     final db = _ensureDb();
     if (db == null) return const [];
     try {
@@ -1032,8 +1166,10 @@ class MediaArchive {
   }
 
   /// Known providers for a hash, newest first. [kind] filters when given.
-  List<(String kind, String value)> getSources(String tokenOrSha256,
-      {String? kind}) {
+  List<(String kind, String value)> getSources(
+    String tokenOrSha256, {
+    String? kind,
+  }) {
     final key = _keyOf(tokenOrSha256);
     final db = _ensureDb();
     if (key == null || db == null) return const [];
@@ -1042,13 +1178,15 @@ class MediaArchive {
           ? db.select(
               'SELECT kind,value FROM sources WHERE sha256=? '
               'ORDER BY last_seen DESC',
-              [key])
+              [key],
+            )
           : db.select(
               'SELECT kind,value FROM sources WHERE sha256=? AND kind=? '
               'ORDER BY last_seen DESC',
-              [key, kind]);
+              [key, kind],
+            );
       return [
-        for (final r in rows) (r['kind'] as String, r['value'] as String)
+        for (final r in rows) (r['kind'] as String, r['value'] as String),
       ];
     } catch (_) {
       return const [];
@@ -1060,11 +1198,17 @@ class MediaArchive {
     final db = _ensureDb();
     if (db == null) return const MediaArchiveStats(0, 0, 0);
     try {
-      final r = db.select(
-          'SELECT COUNT(*) AS n, COALESCE(SUM(size),0) AS b, '
-          'SUM(screenshot IS NOT NULL) AS s FROM media').first;
+      final r = db
+          .select(
+            'SELECT COUNT(*) AS n, COALESCE(SUM(size),0) AS b, '
+            'SUM(shot) AS s FROM media',
+          )
+          .first;
       return MediaArchiveStats(
-          r['n'] as int, r['b'] as int, (r['s'] as int?) ?? 0);
+        r['n'] as int,
+        r['b'] as int,
+        (r['s'] as int?) ?? 0,
+      );
     } catch (_) {
       return const MediaArchiveStats(0, 0, 0);
     }
@@ -1072,18 +1216,20 @@ class MediaArchive {
 
   /// Bound the archive: drop entries last accessed more than [maxAgeMs] ago,
   /// then keep only the [maxCount] most recently accessed.
-  void prune(
-      {int maxAgeMs = 365 * 24 * 60 * 60 * 1000, int maxCount = 10000}) {
+  void prune({int maxAgeMs = 365 * 24 * 60 * 60 * 1000, int maxCount = 10000}) {
     final db = _ensureDb();
     if (db == null) return;
     try {
       final cutoff = DateTime.now().millisecondsSinceEpoch - maxAgeMs;
-      db.execute('DELETE FROM media WHERE last_seen < ?', [cutoff]);
-      db.execute(
-        'DELETE FROM media WHERE sha256 NOT IN '
-        '(SELECT sha256 FROM media ORDER BY last_seen DESC LIMIT ?)',
-        [maxCount],
-      );
+      _deleteAll(db, [
+        for (final r in db.select(
+          'SELECT sha256 FROM media WHERE last_seen < ? UNION '
+          'SELECT sha256 FROM (SELECT sha256 FROM media '
+          'ORDER BY last_seen DESC LIMIT 9223372036854775807 OFFSET ?)',
+          [cutoff, maxCount],
+        ))
+          r['sha256'] as String,
+      ]);
     } catch (e) {
       debugPrint('MediaArchive: prune failed: $e');
     }

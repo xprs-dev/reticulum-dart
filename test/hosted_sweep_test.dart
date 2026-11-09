@@ -10,24 +10,16 @@
  * The rule the sweeps must never break: what the owner asked to KEEP (pinned)
  * and the owner's OWN media are not the archive's to delete, however full it is.
  */
-import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:test/test.dart';
 import 'package:reticulum/src/util/media_archive.dart';
-import 'package:sqlite3/open.dart';
 
 Uint8List _blob(int seed, int size) =>
     Uint8List.fromList(List.filled(size, seed & 0xff));
 
 void main() {
-  setUpAll(() {
-    if (Platform.isLinux) {
-      open.overrideFor(
-          OperatingSystem.linux, () => DynamicLibrary.open('libsqlite3.so.0'));
-    }
-  });
 
   late Directory dir;
   late MediaArchive archive;

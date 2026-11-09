@@ -8,24 +8,14 @@
  * RangedFileSource now: SQLite slices the BLOB and the size comes from its
  * column.
  */
-import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
-import 'package:sqlite3/open.dart';
 
 void main() {
-  setUpAll(() {
-    // The system library, as hosted_sweep_test does: Linux ships
-    // libsqlite3.so.0 without the unversioned symlink.
-    if (Platform.isLinux) {
-      open.overrideFor(
-          OperatingSystem.linux, () => DynamicLibrary.open('libsqlite3.so.0'));
-    }
-  });
 
   late Directory dir;
   setUp(() => dir = Directory.systemTemp.createTempSync('media_ranged_'));
