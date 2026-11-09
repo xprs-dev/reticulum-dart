@@ -6,6 +6,9 @@ name: test
 # round-trips), corrupted-chunk rejection, and multi-source work-stealing + the
 # resume-on-drop path entirely in-process, so a regression fails CI instead of
 # being found by hand on devices.
+#
+# The stores are zx stores: zx (x1watt/zx) is a path dependency at
+# ../../x1watt/zx, cloned there by each job.
 on:
   push:
     branches: [main]
@@ -17,6 +20,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Fetch zx (path dependency)
+        run: |
+          mkdir -p ../../x1watt
+          git clone -q --depth 1 https://github.com/x1watt/zx.git ../../x1watt/zx
 
       # The package is plain Dart: no Flutter needed to test it.
       - uses: dart-lang/setup-dart@v1
@@ -30,6 +38,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Fetch zx (path dependency)
+        run: |
+          mkdir -p ../../x1watt
+          git clone -q --depth 1 https://github.com/x1watt/zx.git ../../x1watt/zx
 
       - uses: subosito/flutter-action@v2
         with:

@@ -69,7 +69,12 @@ void main() {
     expect(hops, 0);
     expect(via, 'tcp:a');
 
-    // Path mirror upsert accompanied the announce.
+    // Path mirror upsert accompanied the announce. It crosses from the
+    // transport isolate as a message of its own, so it can land a moment
+    // after the announce event: wait for it, bounded.
+    for (var i = 0; i < 100 && !client.hasPath(got!.destHash); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
     expect(client.hasPath(got!.destHash), isTrue);
     expect(client.pathFor(got!.destHash)!.via, 'tcp:a');
     expect(client.nextHopForIdentity(got!.identity), isNull,
