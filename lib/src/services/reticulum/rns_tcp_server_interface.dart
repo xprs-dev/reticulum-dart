@@ -85,7 +85,7 @@ class RnsTcpServerInterface {
     required this.port,
     required this.transport,
     required this.onPacket,
-    this.bindHost = '0.0.0.0',
+    this.bindHost = '::',
     this.log,
     this.shared = true,
     this.connSpeedRank = 2,
@@ -100,17 +100,33 @@ class RnsTcpServerInterface {
   /// pick one (tests do).
   int? get boundPort => _server?.port;
 
+  /// `::` (the default) is both families on one socket, so a client reaches
+  /// the node over IPv6 as well as IPv4; a machine with IPv6 switched off
+  /// gets IPv4 only. Any other host binds as given.
   Future<void> bind() async {
-    final s = await ServerSocket.bind(bindHost, port, shared: shared);
+    ServerSocket s;
+    var where = bindHost;
+    if (bindHost == '::') {
+      try {
+        s = await ServerSocket.bind(InternetAddress.anyIPv6, port,
+            v6Only: false, shared: shared);
+        where = '[::] (IPv4 and IPv6)';
+      } on SocketException {
+        s = await ServerSocket.bind('0.0.0.0', port, shared: shared);
+        where = '0.0.0.0 (no IPv6 here)';
+      }
+    } else {
+      s = await ServerSocket.bind(bindHost, port, shared: shared);
+    }
     _server = s;
-    log?.call('TCP server listening on $bindHost:$port');
+    log?.call('TCP server listening on $where:$port');
     s.listen(_onClient, onError: (e) => log?.call('server error: $e'));
   }
 
   void _onClient(Socket socket) {
     socket.setOption(SocketOption.tcpNoDelay, true);
     final label =
-        '$labelPrefix#${_seq++}:${socket.remoteAddress.address}:${socket.remotePort}';
+        '$labelPrefix#${_seq++}:${unmappedAddress(socket.remoteAddress).address}:${socket.remotePort}';
 
     // One protocol per connection, decided by the first byte (docs/XPRS.md
     // section 24.4): the HDLC flag 0x7E is Reticulum, printable text is XPRS.
@@ -214,4 +230,19 @@ class RnsTcpServerInterface {
     } catch (_) {}
     _server = null;
   }
+}
+
+/// An IPv4 client on a dual-stack socket arrives as `::ffff:a.b.c.d`; this is
+/// the IPv4 address it is, so labels and private-range checks see IPv4.
+InternetAddress unmappedAddress(InternetAddress a) {
+  final b = a.rawAddress;
+  if (a.type == InternetAddressType.IPv6 && b.length == 16) {
+    for (var i = 0; i < 10; i++) {
+      if (b[i] != 0) return a;
+    }
+    if (b[10] == 0xff && b[11] == 0xff) {
+      return InternetAddress.fromRawAddress(b.sublist(12, 16));
+    }
+  }
+  return a;
 }

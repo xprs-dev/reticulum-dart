@@ -82,4 +82,41 @@ void main() {
     quiet.destroy();
     await srv.close();
   });
+
+  test('one socket for both families: IPv4 and IPv6 clients connect, an IPv4 '
+      'peer is labelled as IPv4', () async {
+    final reg = _Registry();
+    final labels = <String>[];
+    final srv = RnsTcpServerInterface(
+      port: 0,
+      transport: reg,
+      onPacket: (raw, via) {},
+      onPlainText: (socket, label) {
+        labels.add(label);
+        return (Uint8List data) {};
+      },
+    );
+    await srv.bind();
+    final port = srv.boundPort!;
+    final v4 = await Socket.connect('127.0.0.1', port);
+    v4.add(utf8.encode('t:ping f:X1TEST\n'));
+    await v4.flush();
+    final v6 = await Socket.connect('::1', port);
+    v6.add(utf8.encode('t:ping f:X1TEST\n'));
+    await v6.flush();
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(labels, hasLength(2));
+    expect(labels.where((l) => l.contains(':127.0.0.1:')), hasLength(1));
+    expect(labels.where((l) => l.contains(':::1:')), hasLength(1));
+    v4.destroy();
+    v6.destroy();
+    await srv.close();
+  });
+
+  test('unmappedAddress', () {
+    expect(unmappedAddress(InternetAddress('::ffff:192.168.1.5')).address,
+        '192.168.1.5');
+    expect(unmappedAddress(InternetAddress('2a02::1')).address, '2a02::1');
+    expect(unmappedAddress(InternetAddress('10.0.0.1')).address, '10.0.0.1');
+  });
 }
