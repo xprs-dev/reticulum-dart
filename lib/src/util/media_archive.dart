@@ -576,6 +576,30 @@ class MediaArchive {
     return token;
   }
 
+  /// A hosted file that arrives in pieces, too large to hold whole (a film
+  /// uploaded to a gallery): its parts go in under a scratch key as they
+  /// come, its SHA-256 is taken on the way, and [HostedWriter.finish] files
+  /// them under the key the bytes hash to. Null without a database.
+  HostedWriter? beginHosted(
+    String ext, {
+    required String originPubHex,
+    required int tier,
+    bool pin = false,
+  }) {
+    final db = _ensureDb();
+    if (db == null) return null;
+    if (!_scratchSwept) {
+      // Parts of an upload a crash interrupted.
+      _scratchSwept = true;
+      try {
+        db.execute("DELETE FROM media_part WHERE sha256 LIKE 'up:%'");
+      } catch (_) {}
+    }
+    return HostedWriter._(this, db, _normExt(ext), originPubHex, tier, pin);
+  }
+
+  bool _scratchSwept = false;
+
   /// Hosted-blob byte totals for the deposit admission gate: ({strangerBytes,
   /// totalHostedBytes}). Our own/downloaded media (hosted=0) is excluded.
   ({int strangerBytes, int totalHostedBytes}) hostedTotals() {
@@ -1244,5 +1268,102 @@ class MediaArchive {
     } catch (_) {}
     _db = null;
     _instances.removeWhere((_, v) => identical(v, this));
+  }
+}
+
+class _DigestSink implements Sink<crypto.Digest> {
+  crypto.Digest? value;
+  @override
+  void add(crypto.Digest d) => value = d;
+  @override
+  void close() {}
+}
+
+/// One upload into [MediaArchive.beginHosted]: [add] the bytes in order,
+/// then [finish] (or [abort]). Memory held: one part.
+class HostedWriter {
+  HostedWriter._(this._archive, this._db, this._ext, this._origin, this._tier, this._pin)
+      : _scratch = 'up:${DateTime.now().microsecondsSinceEpoch}' {
+    _sha = crypto.sha256.startChunkedConversion(_shaOut);
+    _sha1 = crypto.sha1.startChunkedConversion(_sha1Out);
+  }
+
+  final MediaArchive _archive;
+  final ZxSqlDb _db;
+  final String _ext, _origin, _scratch;
+  final int _tier;
+  final bool _pin;
+  final _shaOut = _DigestSink(), _sha1Out = _DigestSink();
+  late final ByteConversionSink _sha, _sha1;
+  final _pending = BytesBuilder(copy: true);
+  int _n = 0, _size = 0;
+  bool _done = false;
+
+  /// Bytes received so far.
+  int get size => _size;
+
+  void add(List<int> chunk) {
+    if (_done) return;
+    _sha.add(chunk);
+    _sha1.add(chunk);
+    _size += chunk.length;
+    _pending.add(chunk);
+    while (_pending.length >= MediaArchive.partSize) {
+      final all = _pending.takeBytes();
+      _part(Uint8List.sublistView(all, 0, MediaArchive.partSize));
+      _pending.add(Uint8List.sublistView(all, MediaArchive.partSize));
+    }
+  }
+
+  void _part(Uint8List data) {
+    _db.execute('INSERT OR REPLACE INTO media_part(sha256,n,data) VALUES(?,?,?)',
+        [_scratch, _n++, data]);
+  }
+
+  /// Files the upload; returns its key (the SHA-256, base64url), or null
+  /// when [expectKey] is given and the bytes do not hash to it (then
+  /// nothing is kept).
+  String? finish({String? expectKey}) {
+    if (_done) return null;
+    _done = true;
+    if (_pending.length > 0 || _n == 0) _part(_pending.takeBytes());
+    _sha.close();
+    _sha1.close();
+    final key = MediaArchive._b64u(_shaOut.value!.bytes);
+    if (expectKey != null && expectKey != key) {
+      _db.execute('DELETE FROM media_part WHERE sha256=?', [_scratch]);
+      return null;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _db.transaction(() {
+      _db.execute(
+        'INSERT OR IGNORE INTO media'
+        '(sha256,sha1,tlsh,name,ext,description,tags,'
+        ' first_seen,last_seen,size,pinned,hosted,origin_pub,tier,received_at) '
+        'VALUES(?,?,NULL,NULL,?,NULL,NULL,?,?,?,?,1,?,?,?)',
+        [key, MediaArchive._b64u(_sha1Out.value!.bytes), _ext, now, now, _size,
+         _pin ? 1 : 0, _origin, _tier, now],
+      );
+      if (_db.updatedRows > 0) {
+        _db.execute('DELETE FROM media_part WHERE sha256=?', [key]);
+        _db.execute('UPDATE media_part SET sha256=? WHERE sha256=?', [key, _scratch]);
+      } else {
+        _db.execute('DELETE FROM media_part WHERE sha256=?', [_scratch]);
+        _db.execute('UPDATE media SET last_seen=? WHERE sha256=?', [now, key]);
+        if (_pin) _db.execute('UPDATE media SET pinned=1 WHERE sha256=?', [key]);
+      }
+      _archive._syncFts(_db, key);
+    });
+    _archive._notifyPut(key, _size, _ext);
+    return key;
+  }
+
+  /// Drops what arrived.
+  void abort() {
+    if (_done) return;
+    _done = true;
+    try {
+      _db.execute('DELETE FROM media_part WHERE sha256=?', [_scratch]);
+    } catch (_) {}
   }
 }
