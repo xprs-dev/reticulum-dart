@@ -229,6 +229,7 @@ class RnsTransportClient implements RnsInterfaceRegistry {
       iface.edge,
       iface.announceOnly,
       iface.uplink,
+      iface.quiet,
     ]);
   }
 
@@ -340,8 +341,9 @@ class RnsTransportClient implements RnsInterfaceRegistry {
 /// back to the owner, which dispatches it to the real socket/radio.
 class _ExtIface implements RnsInterface {
   @override
-  bool get quiet => false;
+  final bool quiet;
   _ExtIface({
+    this.quiet = false,
     required this.label,
     required this.speedRank,
     required this.hardwareMtu,
@@ -460,6 +462,7 @@ Future<void> _engineBody(SendPort toMain) async {
             edge: msg[4] as bool,
             announceOnly: msg[5] as bool,
             uplink: msg.length > 6 && msg[6] as bool,
+            quiet: msg.length > 7 && msg[7] as bool,
             toMain: toMain,
           );
           ifaces[iface.label] = iface;

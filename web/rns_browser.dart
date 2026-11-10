@@ -20,6 +20,8 @@ import 'dart:typed_data';
 import 'package:reticulum/src/services/reticulum/rns_gateway_client.dart';
 import 'package:reticulum/src/services/reticulum/rns_identity.dart';
 import 'package:reticulum/src/services/reticulum/rns_request.dart';
+import 'package:reticulum/src/util/nostr_crypto.dart';
+import 'package:reticulum/src/util/xprs_crypto.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 WebSocketChannel? _ws;
@@ -117,6 +119,71 @@ Future<JSObject> _api(String method, String path, String queryJson, JSAny? body)
   return out;
 }
 
+/// A field of a wire (`m:` is the rest of the line).
+String? _field(String w, String k) {
+  if (k == 'm') {
+    final i = w.indexOf(' m:');
+    return i < 0 ? null : w.substring(i + 3);
+  }
+  final head = w.contains(' m:') ? w.substring(0, w.indexOf(' m:')) : w;
+  for (final t in head.split(' ')) {
+    if (t.startsWith('$k:')) return t.substring(k.length + 1);
+  }
+  return null;
+}
+
+/// What a signature covers: the wire without `sig:` and `via:` (XPRS.md 5, 6.1).
+String _signedText(String w) {
+  final mi = w.indexOf(' m:');
+  final head = mi < 0 ? w : w.substring(0, mi);
+  final tail = mi < 0 ? '' : w.substring(mi);
+  final kept = head.split(' ').where((t) => !t.startsWith('sig:') && !t.startsWith('via:'));
+  return kept.join(' ') + tail;
+}
+
+bool _sigOk(String w, Uint8List pub) {
+  final s = _field(w, 'sig');
+  if (s == null) return false;
+  final sig = XprsCrypto.b85decode(s);
+  if (sig == null || sig.length != 48) return false;
+  final digest = NostrCrypto.sha256Bytes(Uint8List.fromList(utf8.encode(_signedText(w))));
+  return XprsCrypto.verify(digest, sig, pub);
+}
+
+/// Check a station's /xprs/prove answer for [call], [nonce] and this link
+/// (spec/API-HTTP.md): its callsign derives from `k:`, both wires are signed
+/// with that key, and the session names this link and the nonce.
+String _verify(String proofJson, String call, String nonce) {
+  String no(String why) => jsonEncode({'ok': false, 'why': why});
+  Map<String, dynamic> p;
+  try {
+    p = jsonDecode(proofJson) as Map<String, dynamic>;
+  } catch (_) {
+    return no('no proof');
+  }
+  final c = call.toUpperCase().split('-').first;
+  final id = '${p['identity'] ?? ''}', sess = '${p['session'] ?? ''}', link = '${p['link'] ?? ''}';
+  if (id.isEmpty || sess.isEmpty || link.isEmpty) return no('the station sent no proof');
+  if ((_field(id, 'f') ?? '').toUpperCase().split('-').first != c) return no('the identity is not $c');
+  final npub = _field(id, 'k');
+  if (npub == null) return no('the identity carries no key');
+  String keyHex;
+  try {
+    keyHex = NostrCrypto.decodeNpub(npub);
+  } catch (_) {
+    return no('the key is not an npub');
+  }
+  if (c.length < 4 || NostrCrypto.deriveCallsign(keyHex, length: c.length - 2) != c.substring(2)) {
+    return no('$c is not derived from that key');
+  }
+  final pub = Uint8List.fromList(List.generate(32, (i) => int.parse(keyHex.substring(2 * i, 2 * i + 2), radix: 16)));
+  if (!_sigOk(id, pub)) return no('the identity is not signed by its key');
+  if ((_field(sess, 'f') ?? '').toUpperCase().split('-').first != c) return no('the session is not from $c');
+  if (_field(sess, 'm') != '$link.$nonce') return no('the session does not name this link');
+  if (!_sigOk(sess, pub)) return no('the session is not signed by $c');
+  return jsonEncode({'ok': true, 'key': keyHex, 'nick': _field(id, 'nick')});
+}
+
 Future<void> _close() async {
   final g = _gw, l = _link;
   if (g != null && l != null) g.drop(l);
@@ -139,5 +206,7 @@ void main() {
       ((JSString m, JSString p, JSString q, JSAny? b) => _api(m.toDart, p.toDart, q.toDart, b).toJS).toJS);
   o.setProperty('close'.toJS, (() => _close().toJS).toJS);
   o.setProperty('logs'.toJS, (() => _logs.join('\n').toJS).toJS);
+  o.setProperty('verify'.toJS,
+      ((JSString p, JSString c, JSString n) => _verify(p.toDart, c.toDart, n.toDart).toJS).toJS);
   _xprsRns = o;
 }

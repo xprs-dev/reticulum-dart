@@ -1048,7 +1048,12 @@ class RnsTransport implements RnsInterfaceRegistry {
     // held 140 messages for relay, and delivered none. A path through
     // ourselves is never a path.
     final selfId = transportId;
+    // Only an ANNOUNCE can be our own rebroadcast coming back. Any other
+    // packet that names us as its transport id was addressed THROUGH us (a
+    // link request from a client behind us) and is ours to forward: dropping
+    // those here made this node forward no client's link at all.
     if (selfId != null &&
+        p.packetType == RnsPacketType.announce &&
         p.headerType == RnsHeaderType.header2 &&
         p.transportId != null &&
         _eq(p.transportId!, selfId)) {
@@ -1117,8 +1122,12 @@ class RnsTransport implements RnsInterfaceRegistry {
       remember();
       // As a transport node, forward link/resource traffic that isn't for us —
       // unless we've dropped to passive (leaf) mode to shed CPU load.
-      if (transportId != null && !_passive && _maybeForward(p, viaArg)) {
-        return null;
+      final fwd = transportId != null && !_passive && _maybeForward(p, viaArg);
+      if (!fwd && p.packetType == RnsPacketType.linkRequest && p.headerType == RnsHeaderType.header2) {
+        final tid = p.transportId;
+        log?.call('link request to ${_hex(p.destHash).substring(0, 8)} via $viaArg: '
+            'not forwarded (for us: ${tid != null && transportId != null && _eq(tid, transportId!)}, '
+            'path: ${_paths.containsKey(_hex(p.destHash))}, passive: $_passive)');
       }
       return null;
     }
