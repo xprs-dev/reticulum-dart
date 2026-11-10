@@ -27,6 +27,9 @@ export 'src/services/reticulum/lxmf/lxmf_message.dart';
 export 'src/services/reticulum/lxmf/lxmf_msgpack.dart';
 export 'src/services/reticulum/lxmf/lxmf_router.dart';
 export 'src/services/reticulum/nomad_node.dart';
+export 'src/services/reticulum/rns_request.dart';
+export 'src/services/reticulum/rns_frame_interface.dart';
+export 'src/services/reticulum/rns_gateway_client.dart';
 
 // ── NOSTR identity & notes ──────────────────────────────────────────────
 export 'src/util/nostr_crypto.dart';

@@ -17,6 +17,8 @@ import 'rns_transport.dart';
 
 class RnsUdpInterface implements RnsInterface {
   @override
+  bool get quiet => false;
+  @override
   bool get uplink => false;
   @override
   bool get announceOnly => false;

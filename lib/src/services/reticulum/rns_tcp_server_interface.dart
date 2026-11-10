@@ -19,6 +19,8 @@ import 'rns_transport.dart';
 /// One accepted client connection, exposed as an interface to the transport.
 class _RnsTcpServerConn implements RnsInterface {
   @override
+  bool get quiet => false;
+  @override
   bool get uplink => false;
   @override
   bool get announceOnly => false;

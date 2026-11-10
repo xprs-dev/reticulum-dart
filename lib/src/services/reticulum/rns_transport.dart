@@ -66,6 +66,11 @@ abstract class RnsInterface {
   /// a hub we run ourselves) stays false, so local peers still reach every
   /// uplink. Default false.
   bool get uplink => false;
+  /// True for a client that wants no announce flood at all: a browser through
+  /// a gateway (RnsFrameInterface). It gets what it asked for (path answers,
+  /// its links' traffic) and the node's own announces, never the
+  /// announces of others rebroadcast. Default false.
+  bool get quiet => false;
 }
 
 /// Where we last heard an identity, and how confident we still are about it.
@@ -364,6 +369,9 @@ class RnsTransport implements RnsInterfaceRegistry {
   /// announce). Inbound relaying uses [ingest]'s rebroadcast instead.
   void sendOnAll(Uint8List raw) {
     for (final i in _interfaces) {
+      // A quiet client (a browser on a gateway) gets only what is addressed
+      // to it: its links' packets and answers to its own path requests.
+      if (i.quiet) continue;
       i.send(raw);
     }
   }
@@ -1500,7 +1508,7 @@ class RnsTransport implements RnsInterfaceRegistry {
     final tid = transportId;
     if (tid == null) return;
     if (pathHops >= kRnsMaxHops) return;
-    var others = _interfaces.where((i) => i.label != via);
+    var others = _interfaces.where((i) => i.label != via && !i.quiet);
     // An announce that arrived from a shared transport is not carried to
     // another shared transport: they hold the same flood, so the copies are
     // pure upload, and a hub's announce budget charges us for them. Local

@@ -10,6 +10,8 @@ import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
 
 class _FakeIface implements RnsInterface {
+  @override
+  bool get quiet => false;
   _FakeIface(this.label);
   final List<Uint8List> sent = [];
   @override

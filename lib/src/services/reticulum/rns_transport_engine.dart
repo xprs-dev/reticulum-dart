@@ -339,6 +339,8 @@ class RnsTransportClient implements RnsInterfaceRegistry {
 /// Engine-side stand-in for an owner-held interface: send() bounces the frame
 /// back to the owner, which dispatches it to the real socket/radio.
 class _ExtIface implements RnsInterface {
+  @override
+  bool get quiet => false;
   _ExtIface({
     required this.label,
     required this.speedRank,

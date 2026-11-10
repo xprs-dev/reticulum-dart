@@ -16,6 +16,8 @@ import 'rns_transport.dart';
 
 class RnsTcpInterface implements RnsInterface {
   @override
+  bool get quiet => false;
+  @override
   bool get announceOnly => false;
   // Path preference. Default 2 (internet TCP); a WiFi-Direct link passes 4 so
   // the dedicated P2P pipe beats even a shared LAN (3).

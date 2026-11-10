@@ -227,6 +227,18 @@ class RnsCrypto {
   /// already applies. A shed can never make a forged signature pass.
   static Future<bool> ed25519Verify(
       Uint8List pub, List<int> message, Uint8List sig) async {
+    // A browser has no isolates (the web build, rns.js): there the worker
+    // never answers, and a verify that only went through it failed every
+    // announce. Verify inline; a browser verifies a few announces, not a flood.
+    if (_onWeb) {
+      try {
+        return await _ed25519.verify(message,
+            signature: c.Signature(sig,
+                publicKey: c.SimplePublicKey(pub, type: c.KeyPairType.ed25519)));
+      } catch (_) {
+        return false;
+      }
+    }
     // Verifies are attacker-controlled volume: shed under backlog (fail
     // closed — the packet is dropped, a forged signature can never pass).
     final out = await _CryptoWorker.instance.request(
@@ -239,6 +251,9 @@ class RnsCrypto {
     return out == true;
   }
 }
+
+/// Compiled for a browser (no isolates there).
+const bool _onWeb = bool.fromEnvironment('dart.library.js_interop');
 
 enum _CryptoOp { edVerify, edSign, edPub, x25519Shared, x25519Pub, x25519Gen, edGen }
 

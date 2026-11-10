@@ -128,6 +128,8 @@ class LanSentRing {
 
 class RnsLanInterface implements RnsInterface {
   @override
+  bool get quiet => false;
+  @override
   final String label;
 
   @override
