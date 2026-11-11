@@ -40,7 +40,7 @@ const Duration kNostrPollInterval = Duration(minutes: 10);
 
 /// The slice of an event store the hub needs — put + query. `RelayEventStore`
 /// satisfies it via [NostrStore.of]; tests use an in-memory fake so the hub is
-/// exercisable without the sqlite native library.
+/// exercisable without opening a zx store.
 abstract class NostrStore {
   bool put(NostrEvent e, {int tier});
   List<NostrEvent> query(NostrFilter f);
@@ -249,7 +249,7 @@ class NostrRelayHub {
   /// LOCAL relay, which is always connected and always silent, so a phone with
   /// no network at all still looked busy and the engine kept its 400ms tick —
   /// draining subscriptions nothing was filling and re-running a whole-table
-  /// sqlite join, at 98% of a core.
+  /// store join, at 98% of a core.
   ///
   /// Traffic is the honest signal: if nothing has arrived from any relay, there
   /// is nothing new to drain, whatever the sockets claim.
@@ -521,7 +521,7 @@ class NostrRelayHub {
   FirehoseFilter? _fireFilter;
 
   /// Pubkeys we have a kind-0 for. An in-memory set, not a store query: the gate
-  /// runs on EVERY firehose event, and a sqlite round-trip per post is exactly
+  /// runs on EVERY firehose event, and a store round-trip per post is exactly
   /// the kind of per-item work that turns the engine isolate into a hot core.
   /// Misses are memoized too — on a public firehose most authors are unknown,
   /// and a cache that only remembers hits re-queries them forever
@@ -1737,7 +1737,7 @@ class NostrRelayHub {
     final missing = <String>[];
     for (final p in _profTracked) {
       // _hasProfile, NOT profileOf: this walks every tracked author, and
-      // profileOf is a SQLite query each time. Under a public firehose a new
+      // profileOf is a store query each time. Under a public firehose a new
       // author arrives constantly, so this pass ran every couple of seconds
       // over the full 500-author window — ~250 queries/s, which pinned a core
       // on a slow phone and ANR'd it. The cache answers the same question and
@@ -1791,7 +1791,7 @@ class NostrRelayHub {
   }
 
   /// The latest stored kind-0 profile event for [pub], if any.
-  /// Sqlite profile lookups performed — counted because an unbounded re-query
+  /// Store profile lookups performed — counted because an unbounded re-query
   /// of absent profiles once pegged an entire core with nothing to show for it.
   int profileLookups = 0;
 
@@ -1854,12 +1854,12 @@ class NostrRelayHub {
     return best;
   }
 
-  // Delivery rate cap: bounds the SQLite/dispatch work this (UI/engine) isolate
+  // Delivery rate cap: bounds the store/dispatch work this (UI/engine) isolate
   // does per second, so a public firehose is SAMPLED instead of flooding the
   // main thread. A followed/web-of-trust feed is low-volume and never trips it.
   static const int _rateWindowMs = 250;
   static const int _rateMaxPerWindow =
-      15; // ~60 events/s ceiling (main-thread SQLite)
+      15; // ~60 events/s ceiling (main-thread store)
   int _rateWindowStart = 0;
   int _rateCount = 0;
   int rateDropped = 0;
@@ -1949,7 +1949,7 @@ class NostrRelayHub {
     //
     // ONLY for posts we actually track. The discovery subscription is a kind-7
     // firehose across every public relay, and persisting all of it meant one
-    // unbatched sqlite INSERT per inbound reaction — thousands a minute, ahead
+    // unbatched store INSERT per inbound reaction — thousands a minute, ahead
     // of the rate cap, burning the engine isolate for rows no one would ever
     // read. Tracked posts are exactly the ones the UI displays (trackStats
     // registers them, and seeds their tallies back from these rows), so this is
@@ -2015,7 +2015,7 @@ class NostrRelayHub {
       _rateCount = 0;
     }
     if (_rateCount >= _rateMaxPerWindow) {
-      rateDropped++; // overflow — dropped before it can reach sqlite
+      rateDropped++; // overflow — dropped before it can reach the store
       return;
     }
     _rateCount++;

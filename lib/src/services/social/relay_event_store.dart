@@ -8,11 +8,11 @@
  * deduplicates by id, honours NIP-01 replaceable semantics, and answers:
  *   - NIP-01 filter queries (ids / authors / kinds / #tag / since / until / limit)
  *   - NIP-50 full-text SEARCH over post content + indexed tag values (file names,
- *     topics) via SQLite FTS5 — this is the "global text search" + "file search"
+ *     topics) via the zx full-text index (BM25) — this is the "global text search" + "file search"
  *   - derived streams: feedForFollows, firehose, recentByTopic, popular
  *   - profile / follow lookups (latest kind-0 / kind-3 per author)
  *
- * Backed by SQLite (sqlite3, same rationale + open/WAL pattern as
+ * Backed by a zx store (social.zx, opened through dbOpener like
  * media_archive.dart). Headless-safe: takes a plain DB path (':memory:' for
  * tests) — the rns_service wiring resolves the real path via ProfileStorage.
  * No Flutter imports, so it runs under `dart run` for tool tests.
@@ -844,9 +844,9 @@ class RelayEventStore {
 
   static String _marks(int n) => List.filled(n, '?').join(',');
 
-  /// Turn free user text into a safe FTS5 MATCH expression: split on
+  /// Turn free user text into a safe full-text query expression: split on
   /// non-word characters, quote each term, AND them with a prefix wildcard on
-  /// the last term for as-you-type feel. Avoids FTS5 syntax injection.
+  /// the last term for as-you-type feel. Avoids query syntax injection.
   static String _ftsQuery(String text) {
     final terms = text
         .toLowerCase()

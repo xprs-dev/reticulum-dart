@@ -5,7 +5,7 @@
  * sent made the archive load the whole BLOB (up to 16 MB) to cut 64 KiB out of
  * it or to learn its length — a swarm asking 256 pieces of one file was about
  * 4 GB of reads (audit 2026-11-04, docs/performance.md 8.9). It is a
- * RangedFileSource now: SQLite slices the BLOB and the size comes from its
+ * RangedFileSource now: the store slices the BLOB and the size comes from its
  * column.
  */
 import 'dart:io';

@@ -201,7 +201,7 @@ double-spend-checked when the relay later redeems it on the ATM chain.
 | always-on node role for mint/ATM | `lib/src/services/files/capacity_governor.dart`, `lib/src/services/social/relay_role.dart` |
 | postage gate + rate limit | `lib/src/services/social/spam.dart` |
 | offline delivery / reconciliation | `lib/src/services/social/store_forward.dart` |
-| sqlite store pattern | `lib/wapp/geoui/activity_archive.dart` |
+| zx store pattern | `lib/wapp/geoui/activity_archive.dart` |
 
 ## 11. Status
 

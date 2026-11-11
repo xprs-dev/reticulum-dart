@@ -1,5 +1,5 @@
 /*
- * FileSource backed by the content-addressed MediaArchive (media.sqlite3).
+ * FileSource backed by the content-addressed MediaArchive (media.zx).
  *
  * Lets a serving node answer file-transfer requests with bytes it already holds
  * (received chat media, imported files, pinned content). The file-transfer
@@ -19,7 +19,7 @@ class MediaFileSource implements RangedFileSource {
   @override
   Uint8List? read(Uint8List fileHash) => archive.get(_hex(fileHash));
 
-  /// One piece, sliced by SQLite. Before this was a [RangedFileSource], every
+  /// One piece, sliced by the store. Before this was a [RangedFileSource], every
   /// GET_RANGE from a peer loaded the whole BLOB to cut 64 KiB out of it.
   @override
   Uint8List? readRange(Uint8List fileHash, int offset, int length) =>

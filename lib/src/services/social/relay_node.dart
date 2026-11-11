@@ -87,7 +87,7 @@ class RelayNode {
   /// EVENT/REQ/COUNT from the network). A phone/leaf sets this false: it still
   /// queries other relays (the client API below), but never serves the network
   /// — serving the whole network's queries off the device store pegged the UI
-  /// isolate (57 MB/s of sqlite reads) and ANR'd the app. Mutable so the owner
+  /// isolate (57 MB/s of store reads) and ANR'd the app. Mutable so the owner
   /// can flip hosting on/off at runtime (capacity / settings switch).
   bool serve;
 

@@ -1,6 +1,6 @@
 /*
  * CompositeFileSource — serve bytes from several sources, first hit wins. Lets a
- * node serve content-addressed bytes from the sqlite archive AND from any number
+ * node serve content-addressed bytes from the zx archive AND from any number
  * of on-disk owner folders (DiskFolderSource) under one FileSource, so disk
  * folders never need to be copied into the archive.
  *

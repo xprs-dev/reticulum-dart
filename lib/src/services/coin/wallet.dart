@@ -1,14 +1,14 @@
 /*
  * wallet — local holdings of participation-coin bearer tokens (Proofs).
  *
- * One SQLite file holding the unspent Proofs this device owns, keyed by the
+ * One zx store (coin_wallet.zx) holding the unspent Proofs this device owns, keyed by the
  * token secret (so the same token can never be stored twice). Spent proofs are
  * retained with state='spent' for the device's own double-spend self-check.
  * Path-injectable (':memory:' for tests); native only, a no-op on web — same
  * shape as ActivityArchive / the other coin-independent stores.
  *
  * This is the wallet's storage layer only; minting/redeeming/settlement live in
- * the mint and ATM layers. coin_ec/bearer_token + sqlite3 + dart:io.
+ * the mint and ATM layers. coin_ec/bearer_token + the zx store (dbOpener) + dart:io.
  */
 
 

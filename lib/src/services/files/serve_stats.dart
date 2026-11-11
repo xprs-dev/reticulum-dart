@@ -105,7 +105,7 @@ class ServeStats {
     var total = 0, d1 = 0, d7 = 0, d30 = 0;
     final daySet = <int>{};
     final perSha = <String, int>{};
-    // Chunk the IN(...) list to stay well under SQLite's variable limit.
+    // Chunk the IN(...) list to stay well under the store's bound-variable limit.
     const chunk = 400;
     try {
       for (var i = 0; i < uniq.length; i += chunk) {

@@ -59,7 +59,7 @@ void main() {
     w.close();
   });
 
-  test('stored proofs still verify offline after a round-trip through sqlite',
+  test('stored proofs still verify offline after a round-trip through the store',
       () {
     final w = CoinWallet.open(':memory:');
     w.add(coinId, mintProof(8));

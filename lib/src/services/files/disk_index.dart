@@ -5,8 +5,8 @@
  * there: sha256 -> {path, size, mtime, folderId, name}.
  *
  * Complements the two content stores: text notes in the relay event store
- * (social.sqlite3), binary blobs in the content-addressed archive (media), and
- * on-disk file hashes/metadata here (disk_index.sqlite3). Survives restarts so a
+ * (social.zx), binary blobs in the content-addressed archive (media), and
+ * on-disk file hashes/metadata here (disk_index.zx). Survives restarts so a
  * re-scan is incremental and the host has a content-addressable view of disk
  * files without re-hashing everything each launch.
  */

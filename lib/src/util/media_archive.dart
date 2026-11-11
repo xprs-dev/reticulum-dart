@@ -208,7 +208,7 @@ class MediaArchive {
   /// profile sees the same content-addressed store.
   static final Map<String, MediaArchive> _instances = {};
 
-  /// Open (or reuse) the archive stored under [directory] (one SQLite file per
+  /// Open (or reuse) the archive stored under [directory] (one zx file, media.zx, per
   /// directory). The directory is created on first write.
   static MediaArchive forDirectory(String directory) => _instances.putIfAbsent(
     directory,

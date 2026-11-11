@@ -10,7 +10,7 @@
  *    authority decisions (define/issue/grant/faucet/ATM/sanction/lift), keeping
  *    the sequence + prev-hash chain correct.
  *
- * Pure/headless except CoinService, which uses CoinWallet (sqlite, native only).
+ * Pure/headless except CoinService, which uses CoinWallet (zx store, native only).
  */
 import '../../util/nostr_crypto.dart';
 import '../../util/nostr_event.dart';

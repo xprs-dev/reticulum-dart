@@ -9,7 +9,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 import 'package:reticulum/reticulum.dart';
 
-/// In-memory store so the hub is testable without the sqlite native library.
+/// In-memory store so the hub is testable without opening a zx store.
 class _FakeStore implements NostrStore {
   final Map<String, NostrEvent> byId = {};
   final Map<String, Set<String>> reactions = {};
@@ -434,7 +434,7 @@ void main() {
       hasLength(burst),
       reason:
           'the gate decides what the feed shows, not a cap sized for '
-          'sqlite writes on a thread the hub no longer runs on',
+          'store writes on a thread the hub no longer runs on',
     );
     await hub.close();
   });
@@ -496,7 +496,7 @@ void main() {
     expect(
       store.byId.values.any((e) => e.content.startsWith('https://spam')),
       isFalse,
-      reason: 'a public firehose must not write junk into sqlite all day',
+      reason: 'a public firehose must not write junk into the store all day',
     );
     await hub.close();
   });

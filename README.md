@@ -55,9 +55,9 @@ dependencies:
 ```
 
 Then `dart pub get` (or `flutter pub get` in an app). `MediaArchive`,
-`RelayEventStore`, etc. use the `sqlite3` package: a Flutter app adds
-`sqlite3_flutter_libs` for the native library, a Dart program uses the
-system's `libsqlite3`.
+`RelayEventStore`, etc. keep their data in zx stores (`*.zx`, pure Dart, no
+native library) opened through the injectable `dbOpener`, which a host such
+as XPRS core points at its own opener.
 
 A Flutter app that wants the BLE transport also adds the sub-package, and
 declares the usual Bluetooth/location permissions:

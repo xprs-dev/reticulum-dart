@@ -40,7 +40,7 @@ token grammar.
 
 ## 2. The content‑addressed archive (`media_archive.dart`)
 
-`MediaArchive` is a local SQLite store keyed by `sha256`. `putBytes(data, ext)`
+`MediaArchive` is a local zx store (`media.zx`) keyed by `sha256`. `putBytes(data, ext)`
 writes the file and returns its `file:` token; `has(sha)` / `getBytes(sha)` read
 it back. This archive is the single source of truth for "what this device can
 serve", and it is wrapped as a Reticulum **file source**:
@@ -48,7 +48,7 @@ serve", and it is wrapped as a Reticulum **file source**:
 - `MediaFileSource(archive)` exposes `read(hash) → bytes` from the archive.
 - `CompositeFileSource([MediaFileSource(archive), diskFolderRegistry])` lets a
   device *also* serve files straight from on‑disk shared folders without copying
-  them into SQLite.
+  them into the store.
 
 `RnsService` registers this as `fileServeSource`, so anything in the archive (or
 a shared disk folder) is automatically reachable over Reticulum by its hash.
@@ -141,7 +141,7 @@ hash and fetches in parallel — no central index. Full detail in [dht.md](dht.m
 ### Find‑by‑text (social relay, `lib/services/social/`)
 
 To discover a file you *don't* have the hash for, XPRS runs a NOSTR‑style relay
-with a **SQLite FTS5** full‑text index (`relay_event_store.dart`):
+with a **zx full‑text (BM25)** index (`relay_event_store.dart`):
 
 - A file is published as a **kind‑1063 metadata event**: tags
   `['x', <sha256>]`, `['name', …]`, `['m', <mime>]`, `['t', <topic>]`, with a
@@ -181,7 +181,7 @@ Files are immutable (a hash is forever a single set of bytes). To publish a
   publishes a DHT provider record for the folderId; a browser resolves providers
   and queries them for the signed events. No central index.
 - **Disk folders** let an owner serve a real on‑disk directory by sha256 without
-  copying into SQLite; consumers subscribe and optionally auto‑sync newer
+  copying into the store; consumers subscribe and optionally auto‑sync newer
   versions of files they've already downloaded.
 
 So a folder is a **mutable directory pointing at immutable, content‑addressed
