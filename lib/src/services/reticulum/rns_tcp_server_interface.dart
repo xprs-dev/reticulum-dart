@@ -125,8 +125,27 @@ class RnsTcpServerInterface {
     s.listen(_onClient, onError: (e) => log?.call('server error: $e'));
   }
 
+  /// A client on a poor radio link (a microcontroller station behind WiFi it
+  /// shares with Bluetooth) loses several frames in a row now and then, and
+  /// TCP doubles its wait before every further try: measured against an
+  /// ESP32-C3, a segment lost three times was not sent again for 13 s and
+  /// one lost six times for 24 s, with the station hearing perfectly well
+  /// again after the first second. Everything for that station queued behind
+  /// it, and a visitor's link request or the parts of an answer timed out.
+  /// Linux 6.15 and later let a socket cap that wait (TCP_RTO_MAX_MS, option
+  /// 44 of IPPROTO_TCP; 1000 ms is the least it takes); elsewhere this is
+  /// refused and nothing changes.
+  static const int retransmitWaitMaxMs = 2000;
+  void _capRetransmitWait(Socket socket) {
+    if (!Platform.isLinux) return;
+    try {
+      socket.setRawOption(RawSocketOption.fromInt(6, 44, retransmitWaitMaxMs));
+    } catch (_) {}
+  }
+
   void _onClient(Socket socket) {
     socket.setOption(SocketOption.tcpNoDelay, true);
+    _capRetransmitWait(socket);
     final label =
         '$labelPrefix#${_seq++}:${unmappedAddress(socket.remoteAddress).address}:${socket.remotePort}';
 
