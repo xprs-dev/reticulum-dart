@@ -172,8 +172,11 @@ class Ble5Bus {
     bool? ok;
     try {
       ok = await _method.invokeMethod<bool>('supported');
+    } on MissingPluginException {
+      _noNative = true; // no native side here (desktop): a definitive no
+      ok = false;
     } catch (_) {
-      ok = false; // no native side here (desktop): a definitive no
+      ok = false;
     }
     if (ok == null) {
       if (!_unknownLogged) {
@@ -240,8 +243,19 @@ class Ble5Bus {
       ? null
       : DateTime.now().millisecondsSinceEpoch - _lastFrameMs;
 
+  /// True once [supported] found no native side at all (desktop: the BLE5 bus
+  /// is Android's Ble5.kt). The scan is then never registered: listening on
+  /// the event channel threw a MissingPluginException that Flutter printed
+  /// with a stack trace on every Linux start, from a caller (the Reticulum
+  /// BLE radio) that starts the scan without asking first.
+  bool _noNative = false;
+
   /// Begin the shared extended scan (idempotent). Demuxes by subtype.
   Future<void> startScan() async {
+    // Ask once if nobody has; an unknown answer (Bluetooth off) still scans,
+    // as before, and only a platform with no native side stops here.
+    if (_supported == null && !_noNative) await supported();
+    if (_noNative) return;
     _wantScan = true;
     _armScanWatchdog();
     if (_scanning) return;
