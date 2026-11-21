@@ -387,8 +387,7 @@ class RnsTransport implements RnsInterfaceRegistry {
   /// rns.wisco.network: a client announcing every 10 s was passed six times,
   /// then never again; this node re-announced every 30 s and was heard by
   /// no other client at all. XPRS.md 12.12.1: a station MUST NOT announce
-  /// more often than the grace allows (see [ownUplinkAnnounceGap] for why
-  /// that is not yet enforced for our own). The path is still learned from a
+  /// more often than the grace allows. The path is still learned from a
   /// muted announce, so path requests keep working; the first announce on a
   /// hub connection always goes, so a reconnect is reachable at once.
   void sendAnnounce(Uint8List raw, Uint8List destHash, {bool uplinks = true}) {
@@ -422,14 +421,27 @@ class RnsTransport implements RnsInterfaceRegistry {
   /// for what we relay.
   Duration uplinkAnnounceGap = const Duration(hours: 1);
 
-  /// The same for our own announces, zero for now. A hub takes the NEWER of
-  /// two copies of an announce even when it is longer, and nodes built before
-  /// the relay rules below still lift a LAN neighbour's announces onto the
-  /// hubs every half minute; against them an hourly announce of our own lost
-  /// the hub's route to a relay, and answers sent that way never arrived
-  /// (measured 2026-10-16 on rns.wisco.network). Once no relay lifts LAN
-  /// announces, this goes to an hour, as XPRS.md 12.12.1 asks.
-  Duration ownUplinkAnnounceGap = Duration.zero;
+  /// The same for our own announces: an hour, as XPRS.md 12.12.1 asks.
+  ///
+  /// It was zero, and at our half-minute cadence the hub muted every
+  /// destination we have. The reference keeps a record per DESTINATION
+  /// (RNS Storage.check_and_update): an announce sooner than the interface's
+  /// rate target is a violation, past the grace the destination is blocked
+  /// until last + target + penalty, and at that cadence about one announce
+  /// passes per block. Measured 2026-11-21 on rns.wisco.network: X3PTZM
+  /// announced 52 times in 26 minutes on an uplink two hours old and a fresh
+  /// client on the same hub received none, so no station could learn the
+  /// archiver existed.
+  ///
+  /// The zero was there because a hub takes the newer of two copies even
+  /// when it is longer, and older nodes lifted a LAN neighbour's announces
+  /// onto the hubs every half minute (measured 2026-10-16). But the hub's
+  /// record is per destination whoever sends the copy, so such a relay mutes
+  /// us whatever our own cadence is: announcing fast never helped, and the
+  /// relay is the thing to update. The first announce on a hub connection
+  /// always goes ([sendAnnounce]), so a reconnect is reachable at once, and
+  /// a muted announce still teaches the hub the path.
+  Duration ownUplinkAnnounceGap = const Duration(hours: 1);
   final Map<String, int> _uplinkAnnouncedMs = {};
 
   /// Announces of ours a hub was spared (see [sendAnnounce]).

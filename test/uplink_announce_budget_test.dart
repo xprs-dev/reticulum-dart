@@ -38,6 +38,12 @@ void main() {
     t.ownUplinkAnnounceGap = const Duration(hours: 1);
   });
 
+  test('our own announces are rationed on a hub by default', () {
+    // At a zero gap a station announcing every half minute is muted by the
+    // hub for every destination it has (measured 2026-11-21).
+    expect(RnsTransport().ownUplinkAnnounceGap, const Duration(hours: 1));
+  });
+
   test('a hub gets one announce per destination per gap, the LAN all', () {
     for (var i = 0; i < 5; i++) {
       t.sendAnnounce(raw, a);
