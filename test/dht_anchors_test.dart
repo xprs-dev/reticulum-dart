@@ -109,5 +109,26 @@ void main() {
       expect(got, isNotEmpty);
       expect(got.first.providerPub, equals(provider.getPublicKey()));
     });
+
+    test('a named holder is asked itself: no anchor, not in routing', () async {
+      final net = _Net();
+      // The holder published with no peers: its record is only on itself.
+      final holderId = await RnsIdentity.generate();
+      final holder = net.add(holderId);
+      final sha = _sha(4);
+      await holder.publish(await ProviderRecord.create(
+          providerIdentity: holderId, sha256: sha));
+
+      final decoyId = await RnsIdentity.generate();
+      net.add(decoyId);
+      final resolver = net.add(await RnsIdentity.generate(), k: 1);
+      resolver.routing.add(DhtContact.ofIdentity(decoyId));
+
+      expect(await resolver.resolve(sha), isEmpty,
+          reason: 'the walk alone does not reach the holder');
+      final got = await resolver.resolve(sha,
+          holders: [RnsIdentity.fromPublicKey(holderId.getPublicKey())]);
+      expect(got.single.providerPub, equals(holderId.getPublicKey()));
+    });
   });
 }

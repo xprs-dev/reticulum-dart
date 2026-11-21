@@ -245,7 +245,15 @@ class DhtNode {
   /// and a provider that then fails to serve is demoted regardless.
   final Map<String, HolderHint> lastHints = {};
 
-  Future<List<ProviderRecord>> resolve(Uint8List sha256) async {
+  ///
+  /// [holders] are stations already known to hold the file (named in an ask,
+  /// or remembered). They are asked themselves, with the anchors and before
+  /// any walk: a holder keeps its own record, so one round answers, wherever
+  /// the record's replicas landed. Without this a fetcher that knew exactly
+  /// who held a file still walked a public overlay for its record, found
+  /// nothing, and never learned the piece list.
+  Future<List<ProviderRecord>> resolve(Uint8List sha256,
+      {List<RnsIdentity> holders = const []}) async {
     final target = dhtFileKey(sha256);
     lastHints.clear();
     final found = <String, ProviderRecord>{}; // providerPub hex -> record
@@ -256,7 +264,13 @@ class DhtNode {
     // of XOR distance), in parallel. publish() stores to them, so for most keys a
     // verified record is here in one round — and it stays findable even if k is
     // small. Only fall through to the XOR-walk when the anchors don't have it.
-    final anchorContacts = _anchorsExcluding(const {});
+    final anchorContacts = <DhtContact>[
+      for (final h in holders)
+        if (!dhtIdEquals(DhtContact.ofIdentity(h).id, myId))
+          DhtContact.ofIdentity(h),
+    ];
+    anchorContacts.addAll(
+        _anchorsExcluding({for (final c in anchorContacts) c.idHex}));
     if (anchorContacts.isNotEmpty) {
       await Future.wait(anchorContacts.map((c) async {
         final resp = await sendRpc(c, DhtMessage.findValue(myPub, sha256));
