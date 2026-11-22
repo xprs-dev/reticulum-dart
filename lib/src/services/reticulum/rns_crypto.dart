@@ -21,6 +21,8 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart' as c;
 import 'package:pointycastle/export.dart' as pc;
 
+import '../../util/xprs_crypto.dart';
+
 /// RNS truncated-hash length: 128 bits = 16 bytes (destination / identity hash).
 const int kRnsTruncatedHashBytes = 16;
 
@@ -250,12 +252,40 @@ class RnsCrypto {
     );
     return out == true;
   }
+
+  /// Check an XPRS signature [sig] (48 or 64 bytes) over [digest] under the
+  /// x-only key [pub], on the crypto worker. Null when it was shed or the
+  /// worker is unavailable: the caller checks inline, as before. Pure-Dart
+  /// secp256k1 is tens of ms on a phone, and a station on a busy channel
+  /// checks hundreds of packets a minute (the archive's periodic write did
+  /// them on the isolate that draws the screen).
+  static Future<bool?> xprsVerify(
+      Uint8List pub, Uint8List digest, Uint8List sig) async {
+    if (_onWeb) return null;
+    final out = await _CryptoWorker.instance.request(
+      _CryptoOp.xprsVerify,
+      a: pub,
+      b: digest,
+      c2: sig,
+      shedUnderLoad: true,
+    );
+    return out is bool ? out : null;
+  }
 }
 
 /// Compiled for a browser (no isolates there).
 const bool _onWeb = bool.fromEnvironment('dart.library.js_interop');
 
-enum _CryptoOp { edVerify, edSign, edPub, x25519Shared, x25519Pub, x25519Gen, edGen }
+enum _CryptoOp {
+  edVerify,
+  edSign,
+  edPub,
+  x25519Shared,
+  x25519Pub,
+  x25519Gen,
+  edGen,
+  xprsVerify,
+}
 
 /// One long-lived crypto isolate for every hot Curve25519 operation. Pure-Dart
 /// point multiplication costs tens of ms on phone hardware; inline it and any
@@ -439,6 +469,12 @@ Future<void> _cryptoWorkerMain(SendPort toMain) async {
             Uint8List.fromList(await kp.extractPrivateKeyBytes()),
             Uint8List.fromList((await kp.extractPublicKey()).bytes),
           ];
+        case _CryptoOp.xprsVerify:
+          // An XPRS signature (secp256k1): the 48-byte short Schnorr over a
+          // packet's digest, or a 64-byte BIP-340 one over an event id.
+          out = c2!.length == 48
+              ? XprsCrypto.verify(b!, c2, a)
+              : XprsCrypto.bip340Verify(b!, c2, a);
         case _CryptoOp.edGen:
           final kp =
               a.isEmpty ? await ed.newKeyPair() : await ed.newKeyPairFromSeed(a);
