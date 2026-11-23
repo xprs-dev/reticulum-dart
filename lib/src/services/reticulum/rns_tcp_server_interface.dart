@@ -179,6 +179,18 @@ class RnsTcpServerInterface {
       });
     }
 
+    // A write to a peer that has gone fails later, on the socket's own
+    // `done`, not where `add` was called: unheard, that is an uncaught error
+    // in the zone (hundreds a day on a public station) and the dead peer
+    // keeps being written to. Heard: the socket is dropped, and the read
+    // side's onDone below does the rest.
+    socket.done.then((_) {}, onError: (Object e) {
+      log?.call('client $label: write failed, dropped');
+      try {
+        socket.destroy();
+      } catch (_) {}
+    });
+
     socket.listen(
       (data) {
         if (conn == null && textSink == null && data.isNotEmpty) {
