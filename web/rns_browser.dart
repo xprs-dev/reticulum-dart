@@ -8,7 +8,14 @@
 //   prove(nonce)            the station's signed {session, identity, link}, as JSON
 //   api(method, path, queryJson, body)  one API call over the link:
 //                           {status, type, body: Uint8Array, headers: JSON}
+//   drop(name)              closes the named link
 //   close()
+//
+// open, prove and api take an optional last argument, a NAME (a callsign):
+// then the link is that station's and kept beside the others, so a page can
+// talk to several stations through one gateway at once (a person's mail is
+// held by several archivers, XPRS.md 9.12). Without it they act on the one
+// unnamed link, which a new open() replaces, as before.
 //
 // Only platform-neutral parts of reticulum-dart are imported (no dart:io).
 import 'dart:async';
@@ -27,6 +34,8 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 WebSocketChannel? _ws;
 RnsGatewayClient? _gw;
 RnsRequestClient? _link;
+final Map<String, RnsRequestClient> _links = {};
+RnsRequestClient? _linkOf(String? name) => name == null ? _link : _links[name];
 final _control = StreamController<Map<String, dynamic>>.broadcast();
 final List<String> _logs = [];
 void _log(String m) {
@@ -63,6 +72,7 @@ Future<String> _connect(String url) async {
     }
   }, onDone: () {
     _link = null;
+    _links.clear();
   }, onError: (_) {});
   return jsonEncode(await _ask({'op': 'hello'}));
 }
@@ -70,27 +80,37 @@ Future<String> _connect(String url) async {
 Future<String> _resolve(String call) async =>
     jsonEncode(await _ask({'op': 'resolve', 'call': call}));
 
-Future<bool> _open(String pubHex) async {
+Future<bool> _open(String pubHex, [String? name]) async {
   final gw = _gw;
   if (gw == null || pubHex.length != 128) return false;
   final pub = Uint8List.fromList(List.generate(
       64, (i) => int.parse(pubHex.substring(2 * i, 2 * i + 2), radix: 16)));
-  final old = _link;
+  final old = _linkOf(name);
   if (old != null) gw.drop(old);
-  final c = _link = gw.client(RnsIdentity.fromPublicKey(pub));
+  final c = gw.client(RnsIdentity.fromPublicKey(pub));
+  if (name == null) {
+    _link = c;
+  } else {
+    _links[name] = c;
+  }
   return c.open();
 }
 
-Future<String> _prove(String nonce) async {
-  final c = _link;
+void _drop(String name) {
+  final c = _links.remove(name), g = _gw;
+  if (c != null && g != null) g.drop(c);
+}
+
+Future<String> _prove(String nonce, [String? name]) async {
+  final c = _linkOf(name);
   if (c == null) return 'null';
   final r = await c.request('/xprs/prove', nonce, timeout: const Duration(seconds: 30));
   final hex = c.linkId?.map((x) => x.toRadixString(16).padLeft(2, '0')).join() ?? '';
   return jsonEncode({if (r is Map) ...r.map((k, v) => MapEntry('$k', v)), 'link': hex});
 }
 
-Future<JSObject> _api(String method, String path, String queryJson, JSAny? body) async {
-  final c = _link;
+Future<JSObject> _api(String method, String path, String queryJson, JSAny? body, [String? name]) async {
+  final c = _linkOf(name);
   final out = JSObject();
   void set(String k, JSAny? v) => out.setProperty(k.toJS, v);
   if (c == null) {
@@ -187,6 +207,12 @@ String _verify(String proofJson, String call, String nonce) {
 Future<void> _close() async {
   final g = _gw, l = _link;
   if (g != null && l != null) g.drop(l);
+  if (g != null) {
+    for (final c in _links.values) {
+      g.drop(c);
+    }
+  }
+  _links.clear();
   _link = null;
   _gw = null;
   await _ws?.sink.close();
@@ -200,10 +226,14 @@ void main() {
   final o = JSObject();
   o.setProperty('connect'.toJS, ((JSString u) => _connect(u.toDart).then((s) => s.toJS).toJS).toJS);
   o.setProperty('resolve'.toJS, ((JSString c) => _resolve(c.toDart).then((s) => s.toJS).toJS).toJS);
-  o.setProperty('open'.toJS, ((JSString k) => _open(k.toDart).then((b) => b.toJS).toJS).toJS);
-  o.setProperty('prove'.toJS, ((JSString n) => _prove(n.toDart).then((s) => s.toJS).toJS).toJS);
+  o.setProperty('open'.toJS,
+      ((JSString k, [JSString? n]) => _open(k.toDart, n?.toDart).then((b) => b.toJS).toJS).toJS);
+  o.setProperty('prove'.toJS,
+      ((JSString x, [JSString? n]) => _prove(x.toDart, n?.toDart).then((s) => s.toJS).toJS).toJS);
+  o.setProperty('drop'.toJS, ((JSString n) => _drop(n.toDart)).toJS);
   o.setProperty('api'.toJS,
-      ((JSString m, JSString p, JSString q, JSAny? b) => _api(m.toDart, p.toDart, q.toDart, b).toJS).toJS);
+      ((JSString m, JSString p, JSString q, JSAny? b, [JSString? n]) =>
+          _api(m.toDart, p.toDart, q.toDart, b, n?.toDart).toJS).toJS);
   o.setProperty('close'.toJS, (() => _close().toJS).toJS);
   o.setProperty('logs'.toJS, (() => _logs.join('\n').toJS).toJS);
   o.setProperty('verify'.toJS,
