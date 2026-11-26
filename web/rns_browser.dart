@@ -8,6 +8,8 @@
 //   prove(nonce)            the station's signed {session, identity, link}, as JSON
 //   api(method, path, queryJson, body)  one API call over the link:
 //                           {status, type, body: Uint8Array, headers: JSON}
+//                           a sixth argument, request headers as JSON
+//                           ({"Range":"bytes=0-99"}), goes with it as `h`
 //   drop(name)              closes the named link
 //   close()
 //
@@ -109,7 +111,8 @@ Future<String> _prove(String nonce, [String? name]) async {
   return jsonEncode({if (r is Map) ...r.map((k, v) => MapEntry('$k', v)), 'link': hex});
 }
 
-Future<JSObject> _api(String method, String path, String queryJson, JSAny? body, [String? name]) async {
+Future<JSObject> _api(String method, String path, String queryJson, JSAny? body,
+    [String? name, String? headersJson]) async {
   final c = _linkOf(name);
   final out = JSObject();
   void set(String k, JSAny? v) => out.setProperty(k.toJS, v);
@@ -125,7 +128,15 @@ Future<JSObject> _api(String method, String path, String queryJson, JSAny? body,
     q = (jsonDecode(queryJson.isEmpty ? '{}' : queryJson) as Map)
         .map((k, v) => MapEntry('$k', '$v'));
   } catch (_) {}
-  final r = await c.request('/xprs/api', {'m': method, 'p': path, 'q': q, if (b != null) 'b': b},
+  // Request headers the station reads (`Range` on a file, web_chat_rns.dart).
+  var h = <String, String>{};
+  try {
+    if (headersJson != null && headersJson.isNotEmpty) {
+      h = (jsonDecode(headersJson) as Map).map((k, v) => MapEntry('$k', '$v'));
+    }
+  } catch (_) {}
+  final r = await c.request(
+      '/xprs/api', {'m': method, 'p': path, 'q': q, if (b != null) 'b': b, if (h.isNotEmpty) 'h': h},
       timeout: const Duration(minutes: 5));
   if (r is! Map) {
     set('status', 0.toJS);
@@ -232,8 +243,8 @@ void main() {
       ((JSString x, [JSString? n]) => _prove(x.toDart, n?.toDart).then((s) => s.toJS).toJS).toJS);
   o.setProperty('drop'.toJS, ((JSString n) => _drop(n.toDart)).toJS);
   o.setProperty('api'.toJS,
-      ((JSString m, JSString p, JSString q, JSAny? b, [JSString? n]) =>
-          _api(m.toDart, p.toDart, q.toDart, b, n?.toDart).toJS).toJS);
+      ((JSString m, JSString p, JSString q, JSAny? b, [JSString? n, JSString? h]) =>
+          _api(m.toDart, p.toDart, q.toDart, b, n?.toDart, h?.toDart).toJS).toJS);
   o.setProperty('close'.toJS, (() => _close().toJS).toJS);
   o.setProperty('logs'.toJS, (() => _logs.join('\n').toJS).toJS);
   o.setProperty('verify'.toJS,
