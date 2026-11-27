@@ -1191,6 +1191,31 @@ class MediaArchive {
     }
   }
 
+  /// Keep at most [maxRows] sources of [kind], dropping the ones seen
+  /// longest ago. For an index that grows with what OTHER stations say they
+  /// hold (XPRS.md 12.9.2): called now and then by its owner, never per
+  /// packet. Returns how many rows went.
+  int pruneSources(String kind, int maxRows) {
+    final db = _ensureDb();
+    if (db == null) return 0;
+    try {
+      final n = db.select('SELECT COUNT(*) AS n FROM sources WHERE kind=?', [kind])
+          .first['n'] as int;
+      if (n <= maxRows) return 0;
+      final edge = db.select(
+          'SELECT last_seen FROM sources WHERE kind=? '
+          'ORDER BY last_seen DESC LIMIT 1 OFFSET ?',
+          [kind, maxRows]);
+      if (edge.isEmpty) return 0;
+      db.execute('DELETE FROM sources WHERE kind=? AND last_seen<=?',
+          [kind, edge.first['last_seen']]);
+      return db.updatedRows;
+    } catch (e) {
+      debugPrint('MediaArchive: pruneSources failed: $e');
+      return 0;
+    }
+  }
+
   /// Known providers for a hash, newest first. [kind] filters when given.
   List<(String kind, String value)> getSources(
     String tokenOrSha256, {
