@@ -68,8 +68,9 @@ abstract class RnsInterface {
   bool get uplink => false;
   /// True for a client that wants no announce flood at all: a browser through
   /// a gateway (RnsFrameInterface). It gets what it asked for (path answers,
-  /// its links' traffic) and the node's own announces, never the
-  /// announces of others rebroadcast. Default false.
+  /// its links' traffic), never the announces of others rebroadcast, and
+  /// the node's own announces only while it is asking for a path
+  /// ([RnsTransport.quietAnnounceWindow]). Default false.
   bool get quiet => false;
 }
 
@@ -362,8 +363,10 @@ class RnsTransport implements RnsInterfaceRegistry {
   @override
   void addInterface(RnsInterface iface) => _interfaces.add(iface);
   @override
-  void removeInterface(RnsInterface iface) =>
-      _interfaces.removeWhere((i) => identical(i, iface));
+  void removeInterface(RnsInterface iface) {
+    _interfaces.removeWhere((i) => identical(i, iface));
+    _quietAskedMs.remove(iface.label);
+  }
 
   /// Originate a locally-produced packet on every interface (e.g. our own
   /// announce). Inbound relaying uses [ingest]'s rebroadcast instead.
@@ -395,6 +398,18 @@ class RnsTransport implements RnsInterfaceRegistry {
     final d = _hex(destHash);
     for (final i in _interfaces) {
       if (!i.uplink) {
+        // A quiet client pays for every byte (a browser on a phone's data
+        // plan): our announces reach it as the answer to its path request,
+        // not as a stream. Measured 2026-11-27: an idle page received 20
+        // announces a minute, 300 KB an hour, three times its own traffic.
+        if (i.quiet) {
+          final asked = _quietAskedMs[i.label];
+          if (asked == null ||
+              nowMs - asked > quietAnnounceWindow.inMilliseconds) {
+            _quietAnnouncesHeld++;
+            continue;
+          }
+        }
         i.send(raw);
         continue;
       }
@@ -443,6 +458,16 @@ class RnsTransport implements RnsInterfaceRegistry {
   /// a muted announce still teaches the hub the path.
   Duration ownUplinkAnnounceGap = const Duration(hours: 1);
   final Map<String, int> _uplinkAnnouncedMs = {};
+
+  /// How long after a path request a quiet client is sent our own announces:
+  /// the answer to a request for one of our destinations is an announce of
+  /// all of them, built a moment later ([onPathRequest]).
+  Duration quietAnnounceWindow = const Duration(seconds: 10);
+  final Map<String, int> _quietAskedMs = <String, int>{};
+  int _quietAnnouncesHeld = 0;
+
+  /// Announces of ours a quiet client was spared (see [sendAnnounce]).
+  int get quietAnnouncesHeld => _quietAnnouncesHeld;
 
   /// Announces of ours a hub was spared (see [sendAnnounce]).
   int get uplinkAnnouncesHeld => _uplinkAnnouncesHeld;
@@ -1112,6 +1137,9 @@ class RnsTransport implements RnsInterfaceRegistry {
           p.data.length >= 16) {
         remember();
         final wanted = Uint8List.sublistView(p.data, 0, 16);
+        if (_ifaceByLabel(viaArg)?.quiet ?? false) {
+          _quietAskedMs[viaArg] = DateTime.now().millisecondsSinceEpoch;
+        }
         final cb = onPathRequest;
         if (cb != null) {
           final nowMs = DateTime.now().millisecondsSinceEpoch;
